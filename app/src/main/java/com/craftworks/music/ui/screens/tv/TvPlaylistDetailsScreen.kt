@@ -116,7 +116,7 @@ fun TvPlaylistDetails(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 48.dp)
+                .padding(horizontal = 40.dp)
                 .focusGroup(),
             horizontalArrangement = Arrangement.spacedBy(48.dp)
         ) {

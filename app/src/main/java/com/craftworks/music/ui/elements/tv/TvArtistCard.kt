@@ -2,6 +2,7 @@ package com.craftworks.music.ui.elements.tv
 
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -27,7 +28,7 @@ fun TvArtistCard(
     modifier: Modifier = Modifier
 ) {
     CompactCard(
-        modifier = modifier.width(128.dp),
+        modifier = modifier.fillMaxWidth(),
         onClick = onClick,
         image = {
             AsyncImage(

@@ -141,7 +141,7 @@ fun TvAlbumDetails(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 48.dp),
+                .padding(horizontal = 40.dp),
             horizontalArrangement = Arrangement.spacedBy(48.dp)
         ) {
             Column(

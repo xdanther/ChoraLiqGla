@@ -117,7 +117,7 @@ fun TvArtistDetailsScreen(
         LazyVerticalGrid(
             modifier = Modifier
                 .fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
+            contentPadding = PaddingValues(horizontal = 40.dp, vertical = 32.dp),
             columns = GridCells.Fixed(5),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {

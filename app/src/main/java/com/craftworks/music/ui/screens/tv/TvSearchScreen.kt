@@ -120,9 +120,9 @@ fun TvSearchScreen(
             .focusGroup()
             .focusRequester(focusRequester)
             .focusRestorer(focusRequester),
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(horizontal = 40.dp, vertical = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp),
     ) {
         item(
             span = { GridItemSpan(5) }

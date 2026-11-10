@@ -54,6 +54,7 @@ import com.craftworks.music.player.SongHelper
 import com.craftworks.music.ui.elements.dialogs.tv.GenericListDialog
 import com.craftworks.music.ui.elements.dialogs.tv.SongDialog
 import com.craftworks.music.ui.elements.tv.TvHorizontalSongCard
+import com.craftworks.music.ui.elements.tv.TvPageTitle
 import com.craftworks.music.ui.viewmodels.SongsScreenViewModel
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
@@ -130,15 +131,19 @@ fun TvSongsScreen(
             .focusGroup()
             .focusRequester(focusRequester)
             .focusRestorer(focusRequester),
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
+        contentPadding = PaddingValues(horizontal = 40.dp, vertical = 32.dp),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(20.dp),
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(28.dp),
     ) {
         item {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                TvPageTitle(
+                    text = stringResource(R.string.nav_songs),
+                    modifier = Modifier.weight(1f)
+                )
                 if (currentProvider?.featureFlags?.contains(ProviderFeature.FAVORITES) ?: false) {
                     IconButton(
                         onClick = {

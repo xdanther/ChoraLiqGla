@@ -31,7 +31,7 @@ fun TvPlaylistCard(
 ) {
     val playlistName = playlist.mediaMetadata.title?.toString() ?: ""
     StandardCardContainer(
-        modifier = modifier.width(128.dp),
+        modifier = modifier.fillMaxWidth(),
         imageCard = {
             Card(
                 onClick = onClick,

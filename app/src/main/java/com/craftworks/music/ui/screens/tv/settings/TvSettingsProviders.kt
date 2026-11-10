@@ -62,7 +62,7 @@ fun TvS_ProviderScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 48.dp, vertical = 24.dp),
+            .padding(horizontal = 40.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         TabRow(

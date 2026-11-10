@@ -27,6 +27,21 @@ private val DarkColorScheme = darkColorScheme(
     tertiary = Pink80
 )
 
+/**
+ * Music-on-TV palette: a black canvas lit by artwork, white type, and a single red
+ * accent reserved for playback state (progress, stars) the way Apple Music does it.
+ */
+private val TvDarkColorScheme = androidx.tv.material3.darkColorScheme(
+    primary = Color(0xFFFA233B),
+    onPrimary = Color.White,
+    background = Color.Black,
+    onBackground = Color.White,
+    surface = Color(0xFF0B0B0B),
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF1B1B1B),
+    onSurfaceVariant = Color(0xFFB3B3B3),
+)
+
 private val LightColorScheme = lightColorScheme(
     primary = Purple40,
     secondary = PurpleGrey40,
@@ -68,7 +83,7 @@ fun MusicPlayerTheme(
 
     if (isTv) {
         val colorScheme = when {
-            darkTheme -> androidx.tv.material3.darkColorScheme()
+            darkTheme -> TvDarkColorScheme
             else -> androidx.tv.material3.lightColorScheme()
         }
 

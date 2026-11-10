@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import com.craftworks.music.data.model.id
 import com.craftworks.music.ui.elements.dialogs.playlistToDelete
 import com.craftworks.music.ui.elements.dialogs.showDeletePlaylistDialog
 import com.craftworks.music.ui.elements.dialogs.tv.PlaylistDeletionConfirmationDialog
+import com.craftworks.music.ui.elements.tv.TvPageTitle
 import com.craftworks.music.ui.elements.tv.TvPlaylistCard
 import com.craftworks.music.ui.viewmodels.PlaylistScreenViewModel
 
@@ -63,10 +65,17 @@ fun TvPlaylistScreen(
             .focusGroup()
             .focusRequester(focusRequester)
             .focusRestorer(focusRequester),
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(horizontal = 40.dp, vertical = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp),
     ) {
+        item(span = { GridItemSpan(5) }) {
+            TvPageTitle(
+                text = stringResource(R.string.nav_playlists),
+                modifier = Modifier.padding(bottom = 14.dp)
+            )
+        }
+
         items(playlists) { playlist ->
             TvPlaylistCard(
                 playlist = playlist,

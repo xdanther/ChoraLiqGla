@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
@@ -44,6 +45,7 @@ import com.craftworks.music.data.model.providerType
 import com.craftworks.music.player.SongHelper
 import com.craftworks.music.ui.elements.dialogs.tv.AddRadioDialog
 import com.craftworks.music.ui.elements.dialogs.tv.ModifyRadioDialog
+import com.craftworks.music.ui.elements.tv.TvPageTitle
 import com.craftworks.music.ui.elements.tv.TvRadioCard
 import com.craftworks.music.ui.viewmodels.RadioScreenViewModel
 import kotlinx.coroutines.launch
@@ -75,10 +77,17 @@ fun TvRadioScreen(
             .focusGroup()
             .focusRequester(focusRequester)
             .focusRestorer(focusRequester),
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(horizontal = 40.dp, vertical = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp),
     ) {
+        item(span = { GridItemSpan(5) }) {
+            TvPageTitle(
+                text = stringResource(R.string.nav_radios),
+                modifier = Modifier.padding(bottom = 14.dp)
+            )
+        }
+
         items(radios) { radio ->
             TvRadioCard (
                 radio = radio,
@@ -102,7 +111,7 @@ fun TvRadioScreen(
         }
         item {
             StandardCardContainer(
-                modifier = Modifier.width(128.dp),
+                modifier = Modifier.fillMaxWidth(),
                 imageCard = {
                     Card(
                         onClick = {

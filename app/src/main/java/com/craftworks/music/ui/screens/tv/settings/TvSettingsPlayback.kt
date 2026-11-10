@@ -64,7 +64,7 @@ fun TvS_PlaybackScreen() {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp)
+        contentPadding = PaddingValues(horizontal = 40.dp, vertical = 32.dp)
     ) {
         item {
             SettingsButtonItem(

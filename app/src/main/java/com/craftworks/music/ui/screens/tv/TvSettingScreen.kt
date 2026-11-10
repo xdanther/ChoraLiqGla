@@ -45,7 +45,7 @@ fun TvSettingScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 48.dp, vertical = 24.dp)
+            .padding(horizontal = 40.dp, vertical = 32.dp)
             .focusRestorer(focusRequester)
             .focusRequester(focusRequester)
             .focusGroup(),

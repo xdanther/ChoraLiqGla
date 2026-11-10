@@ -32,7 +32,7 @@ fun TvRadioCard(
 ) {
     val radioName = radio.mediaMetadata.station?.toString() ?: ""
     StandardCardContainer(
-        modifier = modifier.width(128.dp),
+        modifier = modifier.fillMaxWidth(),
         imageCard = {
             Card(
                 onClick = onClick,

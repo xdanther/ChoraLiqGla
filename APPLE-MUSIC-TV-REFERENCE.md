@@ -262,26 +262,27 @@ this poster geometry is only relevant to promotional shelves.
 
 | Apple behaviour | Implementation here |
 |---|---|
-| Sidebar / top destinations, Now Playing appears when playing | **Left icon rail**, `TvSideNavigation` in `MainActivity.kt`: `androidx.tv.material3.NavigationDrawer` starting closed. Items: Search, then the configurable bottom-nav list (Home, Albums, Songs — off by default, Artists, Radios, Playlists), **Now Playing** only while a media item exists, Settings pinned to the bottom. 24dp icons, labels only when expanded |
-| Dark canvas, colour from artwork | TV branch of `MusicPlayerTheme` uses the **stock** `androidx.tv.material3` dark scheme and default typography. `Color.kt`'s purple Material 3 tokens are phone-only; there is no black/`#FA233B` Music palette |
-| Home is a shelf stack | `TvHomeScreen`: `LazyColumn` with 24dp spacing — first a **320dp-tall `Carousel`** of shuffled albums (genre • artist • duration, big title, Play), then shelves with a `headlineSmall` semibold header and a `LazyRow` of cards |
-| Square covers, captions beneath | `TvAlbumCard`: **128dp** wide, square `AsyncImage`, one-line title + artist below, built on `StandardCardContainer` |
-| Generous margins, five-ish cards per shelf | 48dp horizontal margin, 24dp gaps, 24dp between shelves. At 960dp wide that is five full cards plus a partial sixth |
-| Five-column grids exist too | The library album list (`TvAlbumScreen`) is a `LazyVerticalGrid(GridCells.Fixed(5))` with sort/filter chips above it |
+| Sidebar with labelled destinations, Now Playing when playing | `TvSidebarScaffold` in `ui/elements/tv/TvSidebar.kt`: a 300dp labelled **overlay** opened with the remote's options/menu key and closed with Back, Escape or by choosing an item. Items: Search, the configurable bottom-nav list (Home, Albums, Songs — off by default, Artists, Radios, Playlists), **Now Playing** while a media item exists, Settings pinned to the bottom. Focus is a white pill with black text, selection a 14% white pill. The player route hides it |
+| Dark canvas, colour from artwork | `TvDarkColorScheme` in `Theme.kt`: black background, white type, `#FA233B` as the only accent (playback progress, stars), `#0B0B0B` surfaces. Typography is still the stock `androidx.tv.material3` ramp |
+| Home is a shelf stack | `TvHomeScreen`: `LazyColumn` with 32dp spacing — first a **300dp-tall `Carousel`** of shuffled albums (genre • artist • duration, big title, Play), then shelves with a 22sp semibold header and a `LazyRow` of cards |
+| Square covers, captions beneath | `TvAlbumCard`: square `AsyncImage`, medium-weight one-line title and a 60% subtitle under it, built on `StandardCardContainer`. Width is optional: shelves pass 160dp, grids let it fill the column |
+| Generous margins, exactly five cards per shelf | 40dp horizontal margins, 20dp gaps, 32dp between shelves; 160dp covers put exactly five across the 960dp canvas |
+| Five-column grids exist too | Albums, Artists, Playlists, Radios and Search are all `LazyVerticalGrid(GridCells.Fixed(5))` with 40dp margins, 20dp gaps and a `TvPageTitle` at 22sp semibold above the grid; sort/filter controls sit at the right of that header |
 | Now Playing: artwork + lyrics, controls on demand | `TvNowPlaying` (`ui/playing/tv`): artwork 320dp tall in the left half with title / album • year / artist, `LyricsView` in the right half, bottom control column (shuffle, prev, play, next, repeat + slider, max 480dp wide) that **auto-hides after 5s**; D-pad centre/up/down reveals it, left/right seek while hidden |
 | Artwork-derived backdrop | `NowPlaying_Background` renders one of `PLAIN`, `STATIC_BLUR` (palette colours), or `ANIMATED_BLUR` (gradient, API 33+) behind the TV player |
 | Focus expands and illuminates | Whatever `StandardCardContainer` / tv Material components provide (focus scale + shape); no custom scale, ring, glow or parallax layers |
 | Secondary panels for Info/Queue/Lyrics | Not modelled. Lyrics are a permanent right-hand pane, not a toggled panel; there is no queue, Info or More Options surface |
 
 Type in the TV UI is the stock `androidx.tv.material3` ramp (`headlineLarge` for the
-carousel title, `headlineSmall` for shelf headers, Material defaults elsewhere). `Type.kt`
-only overrides the phone's `bodyLarge`.
+carousel title) with `headlineSmall` at 22sp/600 for shelf and page headers through
+`TvPageTitle`; captions use `bodyMedium` and `bodySmall`. `Type.kt` only overrides the
+phone's `bodyLarge`.
 
 ## 11. Known gaps versus Apple
 
-- **Navigation shape.** Apple's Music navigation is labelled destinations (and, from
-  tvOS 27, a sidebar with categories). Chora's TV UI is an icon-only closed
-  `NavigationDrawer` with no New, no Sing, no Library split view and no Pins.
+- **Navigation shape.** Chora now has a labelled sidebar, but it opens on demand rather
+  than staying visible, and it is a flat destination list: no New, no Sing, no Library
+  split view with category rows, and no Pins.
 - **Home content.** One shelf shape: square album cards from the user's own provider
   (Recently Played / Recently Added / Most Played). No Top Picks, mixes, stations,
   editorial collections, charts or Pins row.
@@ -297,9 +298,9 @@ only overrides the phone's `bodyLarge`.
 - **Layout numbers are inferred.** Apple publishes type, safe areas and grid widths, but
   not Music's exact card sizes, gaps or cover dimensions, so section 8's conversions are
   guidance, not Music's measured layout.
-- **Grid and type drift.** Card width is 128dp (not the 160dp a five-column 960dp canvas
-  implies), shelf spacing is 24dp and headers use Material defaults rather than the
-  halved tvOS ramp in section 7.
+- **Grid and type drift.** Cards now fill 160dp columns with 40dp margins and 20dp gaps,
+  but the type is still Material's ramp at 22sp rather than Apple's halved tvOS sizes,
+  and there is no Large Title or bolder left-aligned heading above the shelves.
 - **Never visually verified in CI.** The app is built and lint-checked by GitHub Actions;
   nobody has rendered these screens in this environment. The only visual evidence is
   `Github/Images/TV/*.png` and the fastlane TV screenshots.

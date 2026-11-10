@@ -2,6 +2,7 @@ package com.craftworks.music.ui.elements.tv
 
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -35,14 +36,14 @@ fun TvAlbumCard(
     album: MediaItem,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
-    width: Dp = 128.dp,
+    width: Dp? = null,
 ) {
     val albumTitle = album.mediaMetadata.title?.toString() ?: ""
     val artistName = album.mediaMetadata.artist?.toString() ?: ""
     val coverArtUrl = album.mediaMetadata.artworkUri
 
     StandardCardContainer(
-        modifier = modifier.width(width),
+        modifier = if (width != null) modifier.width(width) else modifier.fillMaxWidth(),
         imageCard = {
             Card(
                 onClick = onClick, interactionSource = it, content = {

@@ -69,7 +69,7 @@ fun TvS_AppearanceScreen() {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp)
+        contentPadding = PaddingValues(horizontal = 40.dp, vertical = 32.dp)
     ) {
         // Username, Theme, Background, Navbar Items, Home Items, Title Alignment
         item {
