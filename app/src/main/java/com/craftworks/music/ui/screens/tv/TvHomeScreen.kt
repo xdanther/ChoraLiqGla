@@ -260,7 +260,7 @@ fun TvHomeScreen(
                     items(albums, key = {it.mediaId} ) { album ->
                         TvAlbumCard(
                             album = album,
-                            width = 118.dp,
+                            width = 160.dp,
                             onClick = {
                                 navHostController.navigate(Screen.AlbumDetails(album.mediaMetadata.id?:"", album.mediaMetadata.artworkUri.toString())) {
                                     launchSingleTop = true

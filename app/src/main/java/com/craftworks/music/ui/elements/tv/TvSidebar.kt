@@ -26,14 +26,22 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
@@ -54,16 +62,20 @@ import com.craftworks.music.data.BottomNavItem
 import com.craftworks.music.data.model.Screen
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
 
-/** Width of the labelled sidebar, measured against the 960dp TV canvas. */
-private val SidebarWidth = 208.dp
+/** Width of the labelled sidebar panel, measured against the 960dp TV canvas. */
+private val SidebarWidth = 300.dp
+
+/** Scrim drawn over the screen while the sidebar is open. */
+private val ScrimColor = Color.Black.copy(alpha = 0.55f)
 
 /**
- * TV chrome modelled on Apple Music on Apple TV: a permanently visible, labelled
- * sidebar on the leading edge with the destination beside it. Items are text + icon,
- * dimmed when idle, brighter when selected and inverted (white pill, black text) when
- * focused.
+ * TV chrome modelled on Apple Music on Apple TV: a labelled sidebar of destinations
+ * opened from the remote's options/menu button and dismissed with back. Items are
+ * text + icon, dimmed when idle, brighter when selected and inverted (white pill,
+ * black text) when focused.
  *
- * The player route opts out so Now Playing keeps the whole screen.
+ * The panel is an overlay, so screens keep the full canvas while it is closed. It is
+ * not offered on the player route, which keeps the whole screen.
  */
 @Composable
 fun TvSidebarScaffold(
@@ -103,81 +115,126 @@ fun TvSidebarScaffold(
     }
 
     val isNowPlaying = backStackEntry.isOnRoute(Screen.NowPlayingLandscape)
+    var isSidebarOpen by rememberSaveable { mutableStateOf(false) }
+    val firstItemFocusRequester = remember { FocusRequester() }
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        if (!isNowPlaying) {
-            Column(
-                modifier = Modifier
-                    .width(SidebarWidth)
-                    .fillMaxHeight()
-                    .focusGroup()
-                    .padding(start = 24.dp, end = 8.dp, top = 32.dp, bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                TvSidebarItem(
-                    label = stringResource(R.string.nav_search),
-                    icon = Icons.Rounded.Search,
-                    selected = backStackEntry.isOnRoute(Screen.Search)
-                ) {
-                    if (!backStackEntry.isOnRoute(Screen.Search)) navController.navigate(Screen.Search) {
-                        launchSingleTop = true
-                        restoreState = true
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown || isNowPlaying) return@onPreviewKeyEvent false
+
+                when {
+                    event.key == Key.Menu -> {
+                        isSidebarOpen = !isSidebarOpen
+                        true
                     }
-                }
 
-                Spacer(Modifier.height(10.dp))
-
-                navItems.forEach { item ->
-                    if (!item.enabled) return@forEach
-
-                    TvSidebarItem(
-                        label = item.title,
-                        icon = ImageVector.vectorResource(item.icon),
-                        selected = backStackEntry.isOnRoute(item.screenRoute)
-                    ) {
-                        if (!backStackEntry.isOnRoute(item.screenRoute)) navController.navigate(item.screenRoute) {
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                    isSidebarOpen && (event.key == Key.Back || event.key == Key.Escape) -> {
+                        isSidebarOpen = false
+                        true
                     }
-                }
 
-                if (isPlayingVisible) {
-                    TvSidebarItem(
-                        label = stringResource(R.string.nav_playing),
-                        icon = ImageVector.vectorResource(R.drawable.s_m_playback),
-                        selected = isNowPlaying
-                    ) {
-                        if (!isNowPlaying) navController.navigate(Screen.NowPlayingLandscape) {
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                TvSidebarItem(
-                    label = stringResource(R.string.home_settings),
-                    icon = ImageVector.vectorResource(R.drawable.rounded_settings_24),
-                    selected = backStackEntry.isOnRoute(Screen.Settings)
-                ) {
-                    if (!backStackEntry.isOnRoute(Screen.Settings)) navController.navigate(Screen.Settings) {
-                        launchSingleTop = true
-                        restoreState = true
-                    }
+                    else -> false
                 }
             }
-        }
-
+    ) {
         Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
+                .fillMaxSize()
                 .focusRestorer()
                 .focusGroup()
         ) {
             content()
+        }
+
+        if (isSidebarOpen && !isNowPlaying) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(ScrimColor)
+            )
+
+            TvSidebarPanel(
+                navItems = navItems,
+                backStackEntry = backStackEntry,
+                isPlayingVisible = isPlayingVisible,
+                firstItemFocusRequester = firstItemFocusRequester,
+                modifier = Modifier.align(Alignment.CenterStart)
+            ) { screen ->
+                if (!backStackEntry.isOnRoute(screen)) navController.navigate(screen) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                isSidebarOpen = false
+            }
+        }
+    }
+}
+
+@Composable
+private fun TvSidebarPanel(
+    navItems: List<BottomNavItem>,
+    backStackEntry: NavBackStackEntry?,
+    isPlayingVisible: Boolean,
+    firstItemFocusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+    onNavigate: (Screen) -> Unit
+) {
+    LaunchedEffect(Unit) {
+        firstItemFocusRequester.requestFocus()
+    }
+
+    Column(
+        modifier = modifier
+            .width(SidebarWidth)
+            .fillMaxHeight()
+            .background(Color(0xF0141414))
+            .focusGroup()
+            .padding(start = 24.dp, end = 20.dp, top = 32.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        TvSidebarItem(
+            label = stringResource(R.string.nav_search),
+            icon = Icons.Rounded.Search,
+            selected = backStackEntry.isOnRoute(Screen.Search),
+            modifier = Modifier.focusRequester(firstItemFocusRequester)
+        ) {
+            onNavigate(Screen.Search)
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        navItems.forEach { item ->
+            if (!item.enabled) return@forEach
+
+            TvSidebarItem(
+                label = item.title,
+                icon = ImageVector.vectorResource(item.icon),
+                selected = backStackEntry.isOnRoute(item.screenRoute)
+            ) {
+                onNavigate(item.screenRoute)
+            }
+        }
+
+        if (isPlayingVisible) {
+            TvSidebarItem(
+                label = stringResource(R.string.nav_playing),
+                icon = ImageVector.vectorResource(R.drawable.s_m_playback),
+                selected = backStackEntry.isOnRoute(Screen.NowPlayingLandscape)
+            ) {
+                onNavigate(Screen.NowPlayingLandscape)
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        TvSidebarItem(
+            label = stringResource(R.string.home_settings),
+            icon = ImageVector.vectorResource(R.drawable.rounded_settings_24),
+            selected = backStackEntry.isOnRoute(Screen.Settings)
+        ) {
+            onNavigate(Screen.Settings)
         }
     }
 }
@@ -187,6 +244,7 @@ private fun TvSidebarItem(
     label: String,
     icon: ImageVector,
     selected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -211,7 +269,7 @@ private fun TvSidebarItem(
     )
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(containerColor)
