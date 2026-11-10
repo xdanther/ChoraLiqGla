@@ -27,17 +27,17 @@ jobs:
 
       # Every APK must carry the same signature or the TV refuses to update it.
       # The keystore lives in repository secrets, never in the repository.
+      # (GitHub forbids referencing "secrets" inside an if:, so branch here.)
       - name: Write release keystore
-        if: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' }}
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
         run: |
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "::warning::No SIGNING_KEYSTORE_BASE64 secret is configured. This APK is signed with an ephemeral debug key, so it cannot update a previously installed build."
+            exit 0
+          fi
           printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-
-      - name: Warn about missing signing secrets
-        if: ${{ secrets.SIGNING_KEYSTORE_BASE64 == '' }}
-        run: echo "::warning::No SIGNING_KEYSTORE_BASE64 secret is configured. This APK is signed with an ephemeral debug key, so it cannot update a previously installed build."
 
       - name: Build release APK
         env:
