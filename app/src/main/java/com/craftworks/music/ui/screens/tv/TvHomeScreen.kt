@@ -55,6 +55,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
@@ -137,7 +138,8 @@ fun TvHomeScreen(
             .focusGroup()
             .focusRequester(focusRequester)
             .focusRestorer(focusRequester),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
         /*
         item (key = "libraries") {
@@ -183,10 +185,9 @@ fun TvHomeScreen(
             Carousel(
                 itemCount = shuffledAlbums.size,
                 modifier = Modifier
-                    .height(320.dp)
+                    .height(300.dp)
                     .fillMaxWidth()
-                    .padding(horizontal = 48.dp)
-                    .padding(top = 24.dp)
+                    .padding(horizontal = 40.dp)
                     .clip(MaterialTheme.shapes.large)
                     .onFocusChanged {
                         carouselFocused = it.isFocused
@@ -242,21 +243,24 @@ fun TvHomeScreen(
             ) {
                 Text(
                     text = stringResource(titleMap[item.key] ?: R.string.home_recently_played),
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 48.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(start = 40.dp, end = 40.dp, bottom = 14.dp)
                 )
 
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
                     modifier = Modifier
                         .focusGroup(),
-                    contentPadding = PaddingValues(horizontal = 48.dp)
+                    contentPadding = PaddingValues(horizontal = 40.dp)
                 ) {
                     items(albums, key = {it.mediaId} ) { album ->
                         TvAlbumCard(
                             album = album,
+                            width = 118.dp,
                             onClick = {
                                 navHostController.navigate(Screen.AlbumDetails(album.mediaMetadata.id?:"", album.mediaMetadata.artworkUri.toString())) {
                                     launchSingleTop = true

@@ -46,6 +46,7 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.toRoute
 import com.craftworks.music.data.model.Screen
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
+import com.craftworks.music.ui.elements.tv.TvSidebarScaffold
 import com.craftworks.music.ui.playing.NowPlayingContent
 import com.craftworks.music.ui.playing.NowPlayingViewModel
 import com.craftworks.music.ui.playing.dpToPx
@@ -142,7 +143,7 @@ fun SetupNavGraph(
                 }
                 val viewModel: HomeScreenViewModel = hiltViewModel(parentEntry)
                 if (isTv)
-                    TvSideNavigation(navController, mediaController) {
+                    TvSidebarScaffold(navController, mediaController) {
                         TvHomeScreen(navController, mediaController, viewModel)
                     }
                 else
@@ -178,7 +179,7 @@ fun SetupNavGraph(
                 }
                 val viewModel: SongsScreenViewModel = hiltViewModel(parentEntry)
                 if (isTv)
-                    TvSideNavigation(navController, mediaController) {
+                    TvSidebarScaffold(navController, mediaController) {
                         TvSongsScreen(mediaController, navController, viewModel)
                     }
                 else
@@ -190,7 +191,7 @@ fun SetupNavGraph(
                 }
                 val viewModel: RadioScreenViewModel = hiltViewModel(parentEntry)
                 if (isTv)
-                    TvSideNavigation(navController, mediaController) {
+                    TvSidebarScaffold(navController, mediaController) {
                         TvRadioScreen(mediaController, navController, viewModel)
                     }
                 else
@@ -205,7 +206,7 @@ fun SetupNavGraph(
                     }
                     val viewModel: AlbumScreenViewModel = hiltViewModel(parentEntry)
                     if (isTv)
-                        TvSideNavigation(navController, mediaController) {
+                        TvSidebarScaffold(navController, mediaController) {
                             TvAlbumScreen(navController, viewModel)
                         }
                     else
@@ -239,7 +240,7 @@ fun SetupNavGraph(
                     val viewModel: ArtistsScreenViewModel = hiltViewModel(parentEntry)
 
                     if (isTv)
-                        TvSideNavigation(navController, mediaController) {
+                        TvSidebarScaffold(navController, mediaController) {
                             TvArtistScreen(navController, viewModel)
                         }
                     else
@@ -271,7 +272,7 @@ fun SetupNavGraph(
                     val viewModel: PlaylistScreenViewModel = hiltViewModel(parentEntry)
 
                     if (isTv)
-                        TvSideNavigation(navController, mediaController) {
+                        TvSidebarScaffold(navController, mediaController) {
                             TvPlaylistScreen(navController, viewModel)
                         }
                     else
@@ -308,7 +309,7 @@ fun SetupNavGraph(
 
                 composable<Screen.SettingsList> {
                     if (isTv)
-                        TvSideNavigation(navController, mediaController) {
+                        TvSidebarScaffold(navController, mediaController) {
                             TvSettingScreen(navController)
                         }
                     else
@@ -427,7 +428,7 @@ fun SetupNavGraph(
                 val songViewModel: SongsScreenViewModel = hiltViewModel(parentEntry)
                 val artistViewModel: ArtistsScreenViewModel = hiltViewModel(parentEntry)
 
-                TvSideNavigation(navController, mediaController) {
+                TvSidebarScaffold(navController, mediaController) {
                     TvSearchScreen(
                         navController,
                         mediaController,
