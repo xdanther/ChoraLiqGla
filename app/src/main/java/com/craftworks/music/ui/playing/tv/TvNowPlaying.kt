@@ -256,7 +256,7 @@ fun TvNowPlaying(
 
             else -> {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val coverSize = minOf(maxWidth * 0.40f, maxHeight * 0.46f)
+                    val coverSize = minOf(maxWidth * 0.38f, maxHeight * 0.40f)
 
                     // Artwork, blurred out to a colour wash behind everything
                     AsyncImage(
@@ -295,7 +295,7 @@ fun TvNowPlaying(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 40.dp)
-                            .padding(top = 34.dp, bottom = 18.dp),
+                            .padding(top = 28.dp, bottom = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -315,7 +315,7 @@ fun TvNowPlaying(
 
                         AlbumArtHero(metadata = metadata, size = coverSize)
 
-                        Spacer(Modifier.height(26.dp))
+                        Spacer(Modifier.height(18.dp))
 
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -356,7 +356,7 @@ fun TvNowPlaying(
                             }
                         }
 
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(12.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -588,7 +588,7 @@ private fun AlbumArtHero(metadata: MediaMetadata?, size: Dp) {
             alignment = Alignment.BottomCenter,
             modifier = Modifier
                 .width(size)
-                .height(size * 0.42f)
+                .height(size * 0.30f)
                 .graphicsLayer {
                     scaleY = -1f
                     alpha = 0.2f
