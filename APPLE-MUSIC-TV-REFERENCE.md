@@ -268,10 +268,10 @@ this poster geometry is only relevant to promotional shelves.
 | Square covers, captions beneath | `TvAlbumCard`: square `AsyncImage`, medium-weight one-line title and a 60% subtitle under it, built on `StandardCardContainer`. Width is optional: shelves pass 160dp, grids let it fill the column |
 | Generous margins, exactly five cards per shelf | 40dp horizontal margins, 20dp gaps, 32dp between shelves; 160dp covers put exactly five across the 960dp canvas |
 | Five-column grids exist too | Albums, Artists, Playlists, Radios and Search are all `LazyVerticalGrid(GridCells.Fixed(5))` with 40dp margins, 20dp gaps and a `TvPageTitle` at 22sp semibold above the grid; sort/filter controls sit at the right of that header |
-| Now Playing: artwork + lyrics, controls on demand | `TvNowPlaying` (`ui/playing/tv`): artwork 320dp tall in the left half with title / album • year / artist, `LyricsView` in the right half, bottom control column (shuffle, prev, play, next, repeat + slider, max 480dp wide) that **auto-hides after 5s**; D-pad centre/up/down reveals it, left/right seek while hidden |
+| Now Playing: full-bleed artwork, centred cover | `TvNowPlaying` (`ui/playing/tv`): the artwork is blurred across the whole canvas behind a black gradient, album title 16sp at top centre, cover sized to 46% of the height with a faint reflection, track title 26sp beside an animated playing indicator, artist under it, a thin 3dp scrubber with elapsed / remaining time, then **Info** bottom-left and a lyrics bubble bottom-right. Transport (shuffle, prev, play, next, repeat + slider) stays hidden and **auto-hides after 5s**; D-pad centre/up/down reveals it, left/right seek while hidden |
 | Artwork-derived backdrop | `NowPlaying_Background` renders one of `PLAIN`, `STATIC_BLUR` (palette colours), or `ANIMATED_BLUR` (gradient, API 33+) behind the TV player |
 | Focus expands and illuminates | Whatever `StandardCardContainer` / tv Material components provide (focus scale + shape); no custom scale, ring, glow or parallax layers |
-| Secondary panels for Info/Queue/Lyrics | Not modelled. Lyrics are a permanent right-hand pane, not a toggled panel; there is no queue, Info or More Options surface |
+| Secondary panels for Info/Queue/Lyrics | Lyrics open as a full-page overlay from the bubble button; Info opens a small metadata card. There is no queue or More Options surface |
 
 Type in the TV UI is the stock `androidx.tv.material3` ramp (`headlineLarge` for the
 carousel title) with `headlineSmall` at 22sp/600 for shelf and page headers through
@@ -286,8 +286,9 @@ phone's `bodyLarge`.
 - **Home content.** One shelf shape: square album cards from the user's own provider
   (Recently Played / Recently Added / Most Played). No Top Picks, mixes, stations,
   editorial collections, charts or Pins row.
-- **Now Playing panels.** No queue row, Info panel, SharePlay, Favorite or More Options;
-  no long-press item menu on the player. Lyrics are always a pane beside the cover.
+- **Now Playing panels.** No queue row, SharePlay, Favorite or More Options, and no
+  long-press item menu on the player. The Info card shows album, artist, year, format,
+  bitrate and provider only.
 - **Lyrics interaction.** `LyricsView` is shared with the phone UI: no scroll-to-seek,
   no time indicator while scrubbing, no translation or pronunciation lines, no
   full-lyrics/credits panel, no Apple Music Sing controls.
