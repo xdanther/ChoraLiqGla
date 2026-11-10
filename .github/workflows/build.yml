@@ -25,16 +25,8 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build debug and release APKs
-        run: ./gradlew assembleDebug assembleRelease
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: chora-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          archive: false
-          if-no-files-found: error
+      - name: Build release APK
+        run: ./gradlew assembleRelease
 
       - name: Upload release APK
         uses: actions/upload-artifact@v7
