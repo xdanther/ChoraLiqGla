@@ -13,3 +13,6 @@ local.properties
 /crowdin.yml
 /.idea/
 /.kotlin/
+keystore.properties
+*.jks
+*.keystore

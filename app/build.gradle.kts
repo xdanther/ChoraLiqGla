@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("com.google.devtools.ksp")
@@ -7,6 +9,20 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ktorfit)
 }
+
+// Release signing comes from the environment (CI secrets) or an untracked
+// keystore.properties in the repo root. Without either, the release build falls
+// back to the debug key, whose signature changes with every machine and runner.
+val keystoreProperties = Properties().apply {
+    val propertiesFile = rootProject.file("keystore.properties")
+    if (propertiesFile.exists()) propertiesFile.inputStream().use { load(it) }
+}
+
+fun signingSetting(environmentVariable: String, propertyName: String): String? =
+    System.getenv(environmentVariable)?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = signingSetting("SIGNING_STORE_FILE", "storeFile")
 
 android {
     namespace = "com.craftworks.music"
@@ -33,6 +49,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = signingSetting("SIGNING_STORE_PASSWORD", "storePassword")
+                keyAlias = signingSetting("SIGNING_KEY_ALIAS", "keyAlias")
+                keyPassword = signingSetting("SIGNING_KEY_PASSWORD", "keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -41,7 +68,13 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            if (releaseStoreFile == null) {
+                logger.warn(
+                    "No release keystore configured (SIGNING_STORE_FILE or keystore.properties). " +
+                            "Signing with the debug key, so this APK will not install over a build from another machine."
+                )
+            }
+            signingConfig = signingConfigs.getByName(if (releaseStoreFile != null) "release" else "debug")
         }
         debug {
             isDebuggable = false
