@@ -3,6 +3,7 @@ package com.craftworks.music.ui.elements.tv
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -10,13 +11,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Search
@@ -61,18 +63,21 @@ import com.craftworks.music.R
 import com.craftworks.music.data.BottomNavItem
 import com.craftworks.music.data.model.Screen
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
+import kotlinx.coroutines.delay
 
-/** Width of the labelled sidebar panel, measured against the 960dp TV canvas. */
-private val SidebarWidth = 300.dp
+/** Width of the floating sidebar card, sized like the reference panel on a 960dp canvas. */
+private val SidebarWidth = 224.dp
 
 /** Scrim drawn over the screen while the sidebar is open. */
-private val ScrimColor = Color.Black.copy(alpha = 0.55f)
+private val ScrimColor = Color.Black.copy(alpha = 0.30f)
+
+/** The red tile Apple Music uses for its channel row, reused for Chora. */
+private val ChannelTileColor = Color(0xFFFA233B)
 
 /**
- * TV chrome modelled on Apple Music on Apple TV: a labelled sidebar of destinations
- * opened from the remote's options/menu button and dismissed with back. Items are
- * text + icon, dimmed when idle, brighter when selected and inverted (white pill,
- * black text) when focused.
+ * TV chrome modelled on Apple Music on Apple TV: a floating, rounded card that
+ * carries the account row, the destinations as pill rows and a channel tile at
+ * the bottom. It opens from the remote's options/menu button and closes with back.
  *
  * The panel is an overlay, so screens keep the full canvas while it is closed. It is
  * not offered on the player route, which keeps the whole screen.
@@ -160,7 +165,9 @@ fun TvSidebarScaffold(
                 backStackEntry = backStackEntry,
                 isPlayingVisible = isPlayingVisible,
                 firstItemFocusRequester = firstItemFocusRequester,
-                modifier = Modifier.align(Alignment.CenterStart)
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 20.dp, top = 20.dp)
             ) { screen ->
                 if (!backStackEntry.isOnRoute(screen)) navController.navigate(screen) {
                     launchSingleTop = true
@@ -181,6 +188,17 @@ private fun TvSidebarPanel(
     modifier: Modifier = Modifier,
     onNavigate: (Screen) -> Unit
 ) {
+    val context = LocalContext.current
+    val username by AppearanceSettingsManager(context).usernameFlow.collectAsState("Username")
+
+    var clock by remember { mutableStateOf(currentClock()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            clock = currentClock()
+            delay(20_000L)
+        }
+    }
+
     LaunchedEffect(Unit) {
         firstItemFocusRequester.requestFocus()
     }
@@ -188,12 +206,58 @@ private fun TvSidebarPanel(
     Column(
         modifier = modifier
             .width(SidebarWidth)
-            .fillMaxHeight()
-            .background(Color(0xF0141414))
+            .wrapContentHeight()
+            .clip(RoundedCornerShape(26.dp))
+            .background(Color.Black.copy(alpha = 0.62f))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(26.dp))
             .focusGroup()
-            .padding(start = 24.dp, end = 20.dp, top = 32.dp, bottom = 32.dp),
+            .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
+        // Account row: avatar, name, time — the first thing the reference panel shows
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = ImageVector.vectorResource(R.drawable.round_music_note_24),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Text(
+                text = username,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+
+            Spacer(Modifier.width(8.dp))
+
+            Text(
+                text = clock,
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.45f),
+                maxLines = 1
+            )
+        }
+
         TvSidebarItem(
             label = stringResource(R.string.nav_search),
             icon = Icons.Rounded.Search,
@@ -203,11 +267,7 @@ private fun TvSidebarPanel(
             onNavigate(Screen.Search)
         }
 
-        Spacer(Modifier.height(10.dp))
-
-        navItems.forEach { item ->
-            if (!item.enabled) return@forEach
-
+        navItems.filter { it.enabled }.forEach { item ->
             TvSidebarItem(
                 label = item.title,
                 icon = ImageVector.vectorResource(item.icon),
@@ -227,11 +287,18 @@ private fun TvSidebarPanel(
             }
         }
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(14.dp))
 
-        TvSidebarItem(
+        Text(
+            text = "More",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.White.copy(alpha = 0.45f),
+            modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
+        )
+
+        TvSidebarChannelItem(
             label = stringResource(R.string.home_settings),
-            icon = ImageVector.vectorResource(R.drawable.rounded_settings_24),
             selected = backStackEntry.isOnRoute(Screen.Settings)
         ) {
             onNavigate(Screen.Settings)
@@ -252,30 +319,31 @@ private fun TvSidebarItem(
     val containerColor by animateColorAsState(
         targetValue = when {
             focused -> Color.White
-            selected -> Color.White.copy(alpha = 0.14f)
+            selected -> Color.White.copy(alpha = 0.12f)
             else -> Color.Transparent
         },
-        animationSpec = tween(durationMillis = 150),
+        animationSpec = tween(durationMillis = 140),
         label = "sidebar container"
     )
     val contentColor by animateColorAsState(
         targetValue = when {
             focused -> Color.Black
             selected -> Color.White
-            else -> Color.White.copy(alpha = 0.55f)
+            else -> Color.White.copy(alpha = 0.82f)
         },
-        animationSpec = tween(durationMillis = 150),
+        animationSpec = tween(durationMillis = 140),
         label = "sidebar content"
     )
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .height(42.dp)
+            .clip(CircleShape)
             .background(containerColor)
             .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 11.dp),
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -296,6 +364,71 @@ private fun TvSidebarItem(
         )
     }
 }
+
+@Composable
+private fun TvSidebarChannelItem(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    var focused by remember { mutableStateOf(false) }
+
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            focused -> Color.White.copy(alpha = 0.12f)
+            selected -> Color.White.copy(alpha = 0.06f)
+            else -> Color.Transparent
+        },
+        animationSpec = tween(durationMillis = 140),
+        label = "channel container"
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(containerColor)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(ChannelTileColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = ImageVector.vectorResource(R.drawable.round_music_note_24),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.9f),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+private fun currentClock(): String =
+    java.time.LocalTime.now().format(
+        java.time.format.DateTimeFormatter.ofPattern(
+            "h:mm a",
+            java.util.Locale.getDefault()
+        )
+    )
 
 private fun NavBackStackEntry?.isOnRoute(route: Screen): Boolean =
     this?.destination?.hierarchy?.any { it.hasRoute(route::class) } == true
