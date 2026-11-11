@@ -14,6 +14,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -30,10 +31,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -96,6 +96,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * The album page follows Apple Music's proportions on a 960x540dp television:
+ * a ~400dp cover on the left and a ~450dp column of text, pills and rows on the
+ * right, which leaves four track rows and the release footer in view.
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun TvAlbumDetails(
@@ -171,6 +176,8 @@ fun TvAlbumDetails(
                 currentAlbum[0].mediaMetadata.favorite ?: false
             )
         }
+        var descriptionExpanded by remember { mutableStateOf(false) }
+        var infoOpen by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) { playRequester.requestFocus() }
 
@@ -192,7 +199,16 @@ fun TvAlbumDetails(
         val groupedSongs = songs.groupBy { it.mediaMetadata.discNumber }
         val album = currentAlbum[0].mediaMetadata
 
-        Box(modifier = Modifier.fillMaxSize()) {
+        val comment = album.extras?.getString("comment")?.takeIf { it.isNotBlank() }
+        val releaseDate = formatReleaseDate(album.extras?.getString("releaseDate"))
+        val recordLabels = album.extras?.getString("recordLabels")?.takeIf { it.isNotBlank() }
+        val totalMillis = songs.sumOf { it.mediaMetadata.durationMs ?: 0L }
+        val totalMinutes = (totalMillis / 60_000L).toInt()
+
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            // 398dp in the reference, and never wider than the left column allows
+            val coverSize = minOf(maxHeight * 0.74f, maxWidth * 0.42f)
+
             // The artwork, blown up and blurred, is the page's only background
             AsyncImage(
                 model = artwork,
@@ -203,7 +219,7 @@ fun TvAlbumDetails(
                     .graphicsLayer {
                         scaleX = 1.3f
                         scaleY = 1.3f
-                        alpha = 0.6f
+                        alpha = 0.65f
                     }
                     .blur(60.dp)
             )
@@ -213,9 +229,9 @@ fun TvAlbumDetails(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            0f to Color.Black.copy(alpha = 0.5f),
-                            0.45f to Color.Black.copy(alpha = 0.72f),
-                            1f to Color.Black.copy(alpha = 0.92f)
+                            0f to Color.Black.copy(alpha = 0.42f),
+                            0.45f to Color.Black.copy(alpha = 0.62f),
+                            1f to Color.Black.copy(alpha = 0.88f)
                         )
                     )
             )
@@ -223,8 +239,8 @@ fun TvAlbumDetails(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 40.dp, vertical = 32.dp),
-                horizontalArrangement = Arrangement.spacedBy(44.dp)
+                    .padding(start = 44.dp, end = 30.dp, top = 40.dp, bottom = 22.dp),
+                horizontalArrangement = Arrangement.spacedBy(36.dp)
             ) {
                 AsyncImage(
                     model = artwork,
@@ -232,8 +248,8 @@ fun TvAlbumDetails(
                     contentScale = ContentScale.Crop,
                     contentDescription = album.title?.toString(),
                     modifier = Modifier
-                        .size(288.dp)
-                        .shadow(24.dp, RoundedCornerShape(12.dp), clip = true)
+                        .size(coverSize)
+                        .shadow(26.dp, RoundedCornerShape(12.dp), clip = true)
                         .clip(RoundedCornerShape(12.dp))
                 )
 
@@ -246,24 +262,25 @@ fun TvAlbumDetails(
                 ) {
                     Text(
                         text = album.title?.toString() ?: "",
-                        fontSize = 30.sp,
+                        fontSize = 34.sp,
+                        lineHeight = 40.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(2.dp))
 
                     Text(
                         text = album.artist?.toString() ?: "",
-                        fontSize = 22.sp,
-                        color = Color.White.copy(alpha = 0.65f),
+                        fontSize = 19.sp,
+                        color = Color.White.copy(alpha = 0.78f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     Text(
                         text = buildList {
@@ -271,13 +288,57 @@ fun TvAlbumDetails(
                             album.recordingYear?.takeIf { it > 0 }?.let { add(it.toString()) }
                             album.extras?.getString("format")?.takeIf { it.isNotBlank() }?.let(::add)
                         }.joinToString(" · "),
-                        fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.55f),
+                        fontSize = 15.sp,
+                        color = Color.White.copy(alpha = 0.5f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(Modifier.height(20.dp))
+                    if (comment != null) {
+                        Spacer(Modifier.height(14.dp))
+
+                        var descriptionOverflows by remember(comment) { mutableStateOf(false) }
+
+                        Text(
+                            text = comment,
+                            fontSize = 14.sp,
+                            lineHeight = 19.sp,
+                            color = Color.White.copy(alpha = 0.72f),
+                            maxLines = if (descriptionExpanded) 6 else 2,
+                            overflow = TextOverflow.Ellipsis,
+                            onTextLayout = {
+                                if (!descriptionExpanded) descriptionOverflows = it.hasVisualOverflow
+                            }
+                        )
+
+                        if (descriptionOverflows || descriptionExpanded) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Button(
+                                    onClick = { descriptionExpanded = !descriptionExpanded },
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = Color.Transparent,
+                                        contentColor = Color.White,
+                                        disabledContainerColor = Color.Transparent,
+                                        disabledContentColor = Color.White,
+                                        focusedContainerColor = Color.White,
+                                        focusedContentColor = Color.Black
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (descriptionExpanded) "LESS" else "MORE",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -293,26 +354,27 @@ fun TvAlbumDetails(
                                 }
                             },
                             modifier = Modifier
-                                .height(46.dp)
+                                .height(40.dp)
                                 .focusRequester(playRequester),
-                            contentPadding = PaddingValues(horizontal = 26.dp, vertical = 8.dp),
+                            shape = ButtonDefaults.shape(shape = CircleShape),
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
                             colors = ButtonDefaults.colors(
-                                containerColor = Color.White,
-                                contentColor = Color.Black
+                                containerColor = Color.White.copy(alpha = 0.14f),
+                                contentColor = Color.White,
+                                focusedContainerColor = Color.White,
+                                focusedContentColor = Color.Black
                             )
                         ) {
                             Icon(
                                 Icons.Rounded.PlayArrow,
                                 contentDescription = null,
-                                tint = Color.Black,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 text = stringResource(R.string.action_play),
                                 fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.Black
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
 
@@ -327,10 +389,11 @@ fun TvAlbumDetails(
                                     }
                                 }
                             },
-                            modifier = Modifier.height(46.dp),
-                            contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
+                            modifier = Modifier.size(40.dp),
+                            shape = ButtonDefaults.shape(shape = CircleShape),
+                            contentPadding = PaddingValues(0.dp),
                             colors = ButtonDefaults.colors(
-                                containerColor = Color.White.copy(alpha = 0.16f),
+                                containerColor = Color.White.copy(alpha = 0.14f),
                                 contentColor = Color.White,
                                 focusedContainerColor = Color.White,
                                 focusedContentColor = Color.Black
@@ -338,51 +401,37 @@ fun TvAlbumDetails(
                         ) {
                             Icon(
                                 ImageVector.vectorResource(R.drawable.round_shuffle_28),
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = stringResource(R.string.action_shuffle),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
+                                contentDescription = stringResource(R.string.action_shuffle),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
 
                         Spacer(Modifier.weight(1f))
 
                         Button(
-                            onClick = {
-                                if (isStarred) viewModel.unstarAlbum(selectedAlbumId)
-                                else viewModel.starAlbum(selectedAlbumId)
-                                isStarred = !isStarred
-                            },
-                            modifier = Modifier.size(46.dp),
+                            onClick = { infoOpen = !infoOpen },
+                            modifier = Modifier.size(40.dp),
                             shape = ButtonDefaults.shape(shape = CircleShape),
                             contentPadding = PaddingValues(0.dp),
                             colors = ButtonDefaults.colors(
-                                containerColor = Color.White.copy(alpha = 0.16f),
+                                containerColor = Color.White.copy(alpha = 0.14f),
                                 contentColor = Color.White,
                                 focusedContainerColor = Color.White,
                                 focusedContentColor = Color.Black
                             )
                         ) {
-                            Icon(
-                                imageVector = if (isStarred) Icons.Rounded.Check else Icons.Rounded.Add,
-                                contentDescription = if (isStarred) "Remove from library" else "Add to library",
-                                modifier = Modifier.size(22.dp)
-                            )
+                            MoreDots()
                         }
                     }
 
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(14.dp))
 
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
                             .focusGroup(),
-                        contentPadding = PaddingValues(bottom = 16.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         if (groupedSongs.size > 1) {
@@ -394,9 +443,9 @@ fun TvAlbumDetails(
                                         fontWeight = FontWeight.Medium,
                                         color = Color.White.copy(alpha = 0.5f),
                                         modifier = Modifier.padding(
-                                            start = 16.dp,
-                                            top = 12.dp,
-                                            bottom = 6.dp
+                                            start = 14.dp,
+                                            top = 8.dp,
+                                            bottom = 4.dp
                                         )
                                     )
                                 }
@@ -442,7 +491,61 @@ fun TvAlbumDetails(
                             }
                         }
                     }
+
+                    // Release footer: date, length, then the rights line when the provider has one
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        releaseDate?.let {
+                            Text(
+                                text = it,
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.45f),
+                                maxLines = 1
+                            )
+                        }
+                        Text(
+                            text = buildString {
+                                append(songs.size)
+                                append(if (songs.size == 1) " song, " else " songs, ")
+                                append(totalMinutes)
+                                append(if (totalMinutes == 1) " minute" else " minutes")
+                            },
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.45f),
+                            maxLines = 1
+                        )
+                        recordLabels?.let { labels ->
+                            Text(
+                                text = "© " + buildString {
+                                    album.recordingYear?.takeIf { it > 0 }?.let {
+                                        append(it)
+                                        append(' ')
+                                    }
+                                    append(labels)
+                                },
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.45f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
+            }
+
+            AnimatedVisibility(
+                visible = infoOpen,
+                enter = fadeIn(tween(180)),
+                exit = fadeOut(tween(180)),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 30.dp, bottom = 56.dp)
+            ) {
+                AlbumInfoCard(
+                    album = album,
+                    songCount = songs.size,
+                    totalMinutes = totalMinutes,
+                    color = Color.White
+                )
             }
         }
     }
@@ -463,6 +566,76 @@ fun TvAlbumDetails(
         )
 }
 
+@Composable
+private fun MoreDots() {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(3) {
+            Box(
+                Modifier
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(LocalContentColor.current.copy(alpha = 0.7f))
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumInfoCard(
+    album: MediaMetadata,
+    songCount: Int,
+    totalMinutes: Int,
+    color: Color
+) {
+    val format = album.extras?.getString("format")?.uppercase()
+    val labels = album.extras?.getString("recordLabels")
+    val date = formatReleaseDate(album.extras?.getString("releaseDate"))
+
+    Column(
+        modifier = Modifier
+            .width(300.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.Black.copy(alpha = 0.72f))
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = album.title?.toString() ?: "",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = album.artist?.toString() ?: "",
+            fontSize = 13.sp,
+            color = color.copy(alpha = 0.7f),
+            maxLines = 1
+        )
+        date?.let {
+            Text(text = it, fontSize = 12.sp, color = color.copy(alpha = 0.55f))
+        }
+        Text(
+            text = "$songCount songs · $totalMinutes min",
+            fontSize = 12.sp,
+            color = color.copy(alpha = 0.55f)
+        )
+        listOfNotNull(format, labels).forEach {
+            Text(
+                text = it,
+                fontSize = 12.sp,
+                color = color.copy(alpha = 0.45f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TvAlbumTrackRow(
@@ -479,13 +652,13 @@ private fun TvAlbumTrackRow(
     val background by animateColorAsState(
         targetValue = when {
             focused -> Color.White
-            isCurrent -> Color.White.copy(alpha = 0.12f)
+            isCurrent -> Color.White.copy(alpha = 0.78f)
             else -> Color.Transparent
         },
         animationSpec = tween(120),
         label = "Track row background"
     )
-    val contentColor = if (focused) Color.Black else Color.White
+    val contentColor = if (focused || isCurrent) Color.Black else Color.White
 
     Row(
         modifier = Modifier
@@ -499,12 +672,12 @@ private fun TvAlbumTrackRow(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (showTrackNumber) {
             Box(
-                modifier = Modifier.width(34.dp),
+                modifier = Modifier.width(30.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
                 if (isCurrent)
@@ -518,14 +691,23 @@ private fun TvAlbumTrackRow(
                     Text(
                         text = (metadata.trackNumber ?: 0).toString(),
                         fontSize = 15.sp,
-                        color = contentColor.copy(alpha = 0.55f)
+                        color = contentColor.copy(alpha = if (focused) 0.7f else 0.5f)
                     )
             }
         }
 
+        if (metadata.favorite == true) {
+            Text(
+                text = "★",
+                fontSize = 11.sp,
+                color = contentColor.copy(alpha = 0.55f),
+                modifier = Modifier.padding(end = 6.dp)
+            )
+        }
+
         Text(
             text = metadata.title?.toString() ?: "",
-            fontSize = 16.sp,
+            fontSize = 17.sp,
             fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Normal,
             color = contentColor,
             maxLines = 1,
@@ -548,8 +730,24 @@ private fun TvAlbumTrackRow(
                 metadata.durationMs?.div(1000)?.toInt() ?: 0
             ),
             fontSize = 15.sp,
-            color = contentColor.copy(alpha = 0.6f),
+            color = contentColor.copy(alpha = if (focused || isCurrent) 0.75f else 0.5f),
             modifier = Modifier.padding(start = 16.dp)
         )
+    }
+}
+
+/** "2026-08-28" reads as "August 28, 2026" under the track list, as on tvOS. */
+private fun formatReleaseDate(raw: String?): String? {
+    val value = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    if (value.length < 10) return value
+    return try {
+        java.time.LocalDate.parse(value.take(10)).format(
+            java.time.format.DateTimeFormatter.ofPattern(
+                "MMMM d, yyyy",
+                java.util.Locale.getDefault()
+            )
+        )
+    } catch (_: Exception) {
+        value
     }
 }

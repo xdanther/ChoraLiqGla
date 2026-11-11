@@ -89,6 +89,12 @@ abstract class MediaModel
                             putBoolean("userFavorite", this@Album.userFavorite == true)
                             putParcelableArrayList("artists", ArrayList(this@Album.artists))
                             putString("imageId", this@Album.imageId)
+                            this@Album.comment?.takeIf { it.isNotBlank() }?.let { putString("comment", it) }
+                            this@Album.releaseDate?.takeIf { it.isNotBlank() }?.let { putString("releaseDate", it) }
+                            this@Album.recordLabels.takeIf { it.isNotEmpty() }
+                                ?.let { putString("recordLabels", it.joinToString(", ")) }
+                            putInt("songCount", this@Album.songCount ?: 0)
+                            putLong("durationMs", this@Album.durationMs.toLong())
                         }
                     )
                     .build()
