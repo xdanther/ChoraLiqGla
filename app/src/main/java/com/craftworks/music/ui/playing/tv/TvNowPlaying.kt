@@ -14,8 +14,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -37,7 +35,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -56,16 +53,17 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -104,14 +102,12 @@ import com.craftworks.music.ui.playing.LyricsView
 import com.craftworks.music.ui.screens.tv.requestFocusOnFirstGainingVisibility
 import com.craftworks.music.utils.StringUtils
 import com.gigamole.composefadingedges.marqueeHorizontalFadingEdges
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.isActive
-import kotlin.time.Duration.Companion.milliseconds
 
-@kotlin.OptIn(FlowPreview::class)
+/** How long the player bar lingers after the last remote key press. */
+private const val BAR_AUTO_HIDE_MILLIS = 4_500L
+
 @Preview(device = "id:tv_1080p", showBackground = true, showSystemUi = true)
 @Composable
 fun TvNowPlaying(
@@ -120,22 +116,36 @@ fun TvNowPlaying(
     metadata: MediaMetadata? = null,
     onRefreshLyrics: () -> Unit = {}
 ) {
-    var controlsVisible by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val settings = remember(context) { AppearanceSettingsManager(context) }
+
+    val showAppleBar by settings.showApplePlayerBar.collectAsStateWithLifecycle(true)
+    val showClassicBar by settings.showClassicPlayerBar.collectAsStateWithLifecycle(false)
+    val oledProtectionMode by settings.oledProtectionMode.collectAsStateWithLifecycle(OLEDProtectionMode.OFF)
+
+    var barVisible by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
     var lyricsOpen by remember { mutableStateOf(false) }
+    var lastInteraction by remember { mutableLongStateOf(0L) }
 
     val lyrics by LyricsState.lyrics.collectAsStateWithLifecycle()
 
-    // Auto-hide after 5 seconds of visibility
-    val interactionFlow = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
+    val focusManager = LocalFocusManager.current
+    val pageFocus = remember { FocusRequester() }
+    val appleBarFocus = remember { FocusRequester() }
+    val classicBarFocus = remember { FocusRequester() }
 
-    val oledProtectionMode by AppearanceSettingsManager(LocalContext.current)
-        .oledProtectionMode.collectAsStateWithLifecycle(OLEDProtectionMode.OFF)
+    // The bar is a visiting guest: it fades away again so the artwork stays the main thing.
+    LaunchedEffect(barVisible, lastInteraction, infoOpen) {
+        if (!barVisible) return@LaunchedEffect
+        if (infoOpen) return@LaunchedEffect
+        delay(BAR_AUTO_HIDE_MILLIS)
+        barVisible = false
+        pageFocus.requestFocusSafely()
+    }
 
     LaunchedEffect(Unit) {
-        interactionFlow
-            .debounce(5000.milliseconds)
-            .collect { controlsVisible = false }
+        pageFocus.requestFocusSafely()
     }
 
     val iconTextColor by animateColorAsState(
@@ -147,48 +157,103 @@ fun TvNowPlaying(
     val isRadio = metadata?.mediaType == MediaMetadata.MEDIA_TYPE_RADIO_STATION
     val canShowLyrics = !isRadio && lyrics != null
 
+    fun revealBar() {
+        lastInteraction = System.nanoTime()
+        barVisible = true
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .focusRequester(pageFocus)
             .focusable(true)
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val keyCode = keyEvent.nativeKeyEvent.keyCode
 
                 when {
-                    keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK && infoOpen -> {
+                    keyCode == KeyEvent.KEYCODE_BACK && infoOpen -> {
                         infoOpen = false
                         true
                     }
 
-                    keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK && lyricsOpen -> {
+                    keyCode == KeyEvent.KEYCODE_BACK && lyricsOpen -> {
                         lyricsOpen = false
                         true
                     }
 
-                    !controlsVisible -> {
-                        when (keyEvent.nativeKeyEvent.keyCode) {
-                            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_UP -> {
-                                controlsVisible = true
-                                interactionFlow.tryEmit(Unit)
-                                true
-                            }
-
-                            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                                mediaController?.seekBack()
-                                true
-                            }
-
-                            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                                mediaController?.seekForward()
-                                true
-                            }
-
-                            else -> false
-                        }
+                    keyCode == KeyEvent.KEYCODE_BACK && barVisible -> {
+                        barVisible = false
+                        pageFocus.requestFocusSafely()
+                        true
                     }
 
-                    else -> false
+                    // Nothing on screen yet: the DPAD itself drives playback.
+                    !barVisible -> when (keyCode) {
+                        KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            mediaController?.seekBack()
+                            revealBar()
+                            true
+                        }
+
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            mediaController?.seekForward()
+                            revealBar()
+                            true
+                        }
+
+                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                            mediaController.togglePlayback()
+                            revealBar()
+                            true
+                        }
+
+                        KeyEvent.KEYCODE_DPAD_UP,
+                        KeyEvent.KEYCODE_DPAD_DOWN,
+                        KeyEvent.KEYCODE_MENU -> {
+                            revealBar()
+                            true
+                        }
+
+                        else -> false
+                    }
+
+                    // Bar is up but the page still owns the focus.
+                    else -> when (keyCode) {
+                        KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            mediaController?.seekBack()
+                            revealBar()
+                            true
+                        }
+
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            mediaController?.seekForward()
+                            revealBar()
+                            true
+                        }
+
+                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                            mediaController.togglePlayback()
+                            revealBar()
+                            true
+                        }
+
+                        KeyEvent.KEYCODE_DPAD_UP -> {
+                            revealBar()
+                            true
+                        }
+
+                        KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            // Step into the bar's own buttons.
+                            lastInteraction = System.nanoTime()
+                            if (showAppleBar) appleBarFocus.requestFocusSafely()
+                            else classicBarFocus.requestFocusSafely()
+                            true
+                        }
+
+                        else -> false
+                    }
                 }
             }
     ) {
@@ -234,15 +299,6 @@ fun TvNowPlaying(
                             .marqueeHorizontalFadingEdges(marqueeProvider = { Modifier.basicMarquee() })
                     )
 
-                    if (!isRadio) {
-                        Spacer(Modifier.height(16.dp))
-                        TvPlaybackProgress(
-                            mediaController = mediaController,
-                            color = iconTextColor,
-                            modifier = Modifier.widthIn(max = 480.dp)
-                        )
-                    }
-
                     Spacer(Modifier.height(24.dp))
                     LyricsView(
                         iconTextColor,
@@ -256,11 +312,16 @@ fun TvNowPlaying(
 
             else -> {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val coverSize = minOf(maxWidth * 0.38f, maxHeight * 0.40f)
+                    val sideBySideLyrics = lyricsOpen && canShowLyrics
+                    val coverSize = if (sideBySideLyrics) {
+                        minOf(maxWidth * 0.19f, maxHeight * 0.30f)
+                    } else {
+                        minOf(maxWidth * 0.34f, maxHeight * 0.42f)
+                    }
 
                     // Artwork, blurred out to a colour wash behind everything
                     AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
+                        model = ImageRequest.Builder(context)
                             .data(metadata?.artworkUri)
                             .placeholderMemoryCacheKey(metadata?.id)
                             .diskCachePolicy(CachePolicy.DISABLED)
@@ -291,118 +352,130 @@ fun TvNowPlaying(
                             )
                     )
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 40.dp)
-                            .padding(top = 28.dp, bottom = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = metadata?.albumTitle?.toString()
-                                ?.ifBlank { null }
-                                ?: metadata?.artist?.toString().orEmpty(),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = iconTextColor.copy(alpha = 0.78f),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(Modifier.weight(0.5f))
-
-                        AlbumArtHero(metadata = metadata, size = coverSize)
-
-                        Spacer(Modifier.height(18.dp))
-
+                    if (sideBySideLyrics) {
+                        // Lyrics get the right half, the artwork keeps the left
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 56.dp)
+                                .padding(top = 24.dp, bottom = 24.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            PlayingIndicator(
-                                color = iconTextColor,
-                                mediaController = mediaController
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .weight(0.42f)
+                                    .fillMaxHeight(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                AlbumArtHero(metadata = metadata, size = coverSize)
+
+                                Spacer(Modifier.height(14.dp))
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    PlayingIndicator(
+                                        color = iconTextColor,
+                                        mediaController = mediaController
+                                    )
+                                    Text(
+                                        text = metadata?.title?.toString().orEmpty(),
+                                        fontSize = 21.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = iconTextColor,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                Spacer(Modifier.height(4.dp))
+
+                                Text(
+                                    text = metadata?.artist?.toString().orEmpty(),
+                                    fontSize = 15.sp,
+                                    color = iconTextColor.copy(alpha = 0.62f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(Modifier.width(32.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(0.58f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(Color.Black.copy(alpha = 0.28f))
+                                    .padding(vertical = 12.dp)
+                            ) {
+                                LyricsView(
+                                    iconTextColor,
+                                    true,
+                                    mediaController,
+                                    PaddingValues(horizontal = 20.dp),
+                                    onRefreshLyrics
+                                )
+                            }
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 40.dp)
+                                .padding(top = 28.dp, bottom = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text(
-                                text = metadata?.title?.toString().orEmpty(),
-                                fontSize = 26.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = iconTextColor,
+                                text = metadata?.albumTitle?.toString()
+                                    ?.ifBlank { null }
+                                    ?: metadata?.artist?.toString().orEmpty(),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = iconTextColor.copy(alpha = 0.78f),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(Modifier.weight(0.5f))
+
+                            AlbumArtHero(metadata = metadata, size = coverSize)
+
+                            Spacer(Modifier.height(18.dp))
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                PlayingIndicator(
+                                    color = iconTextColor,
+                                    mediaController = mediaController
+                                )
+                                Text(
+                                    text = metadata?.title?.toString().orEmpty(),
+                                    fontSize = 26.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = iconTextColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(Modifier.height(6.dp))
+
+                            Text(
+                                text = metadata?.artist?.toString().orEmpty(),
+                                fontSize = 17.sp,
+                                color = iconTextColor.copy(alpha = 0.62f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                        }
-
-                        Spacer(Modifier.height(6.dp))
-
-                        Text(
-                            text = metadata?.artist?.toString().orEmpty(),
-                            fontSize = 17.sp,
-                            color = iconTextColor.copy(alpha = 0.62f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
-                        if (!isRadio) {
-                            AnimatedVisibility(visible = !controlsVisible) {
-                                TvPlaybackProgress(
-                                    mediaController = mediaController,
-                                    color = iconTextColor
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Button(
-                                onClick = { infoOpen = !infoOpen },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                colors = ButtonDefaults.colors(
-                                    containerColor = Color.Transparent,
-                                    disabledContainerColor = Color.Transparent,
-                                    contentColor = iconTextColor,
-                                    disabledContentColor = iconTextColor.copy(alpha = 0.3f)
-                                )
-                            ) {
-                                Text(
-                                    text = "Info",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = iconTextColor.copy(alpha = 0.85f)
-                                )
-                            }
 
                             Spacer(Modifier.weight(1f))
-
-                            if (canShowLyrics) {
-                                Button(
-                                    onClick = { lyricsOpen = !lyricsOpen },
-                                    contentPadding = PaddingValues(10.dp),
-                                    colors = ButtonDefaults.colors(
-                                        containerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        contentColor = iconTextColor,
-                                        disabledContentColor = iconTextColor.copy(alpha = 0.3f)
-                                    )
-                                ) {
-                                    Icon(
-                                        painter = painterResource(
-                                            if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive
-                                        ),
-                                        contentDescription = "Lyrics",
-                                        tint = iconTextColor.copy(alpha = if (lyricsOpen) 1f else 0.8f),
-                                        modifier = Modifier.size(26.dp)
-                                    )
-                                }
-                            }
                         }
                     }
 
@@ -415,51 +488,62 @@ fun TvNowPlaying(
                         TrackInfoCard(
                             metadata = metadata,
                             color = iconTextColor,
-                            modifier = Modifier.padding(start = 40.dp, bottom = 92.dp)
+                            modifier = Modifier.padding(start = 40.dp, bottom = 150.dp)
                         )
-                    }
-
-                    if (lyricsOpen) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(bottom = 92.dp)
-                                .background(Color.Black.copy(alpha = 0.62f))
-                                .focusable(false)
-                                .focusProperties { canFocus = false }
-                        ) {
-                            LyricsView(
-                                iconTextColor,
-                                true,
-                                mediaController,
-                                PaddingValues(horizontal = 96.dp, vertical = 24.dp),
-                                onRefreshLyrics
-                            )
-                        }
                     }
                 }
             }
         }
 
+        // The bar only exists while the remote is in use
         AnimatedVisibility(
-            visible = controlsVisible,
-            enter = fadeIn(
-                animationSpec = tween(durationMillis = 300)
-            ) + slideInVertically(
+            visible = barVisible && showAppleBar,
+            enter = fadeIn(tween(durationMillis = 300)) + slideInVertically(
                 initialOffsetY = { it },
                 animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-            ) + scaleIn(
-                initialScale = 0.8f,
-                transformOrigin = TransformOrigin(0.5f, 1f),
             ),
-            exit = fadeOut(
-                animationSpec = tween(durationMillis = 300)
-            ) + slideOutVertically(
+            exit = fadeOut(tween(durationMillis = 300)) + slideOutVertically(
                 targetOffsetY = { it },
                 animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-            ) + scaleOut(
-                targetScale = 0.8f,
-                transformOrigin = TransformOrigin(0.5f, 1f)
+            ),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 40.dp)
+                .padding(bottom = 24.dp)
+                .focusGroup()
+        ) {
+            ApplePlayerBar(
+                mediaController = mediaController,
+                color = iconTextColor,
+                isRadio = isRadio,
+                canShowLyrics = canShowLyrics,
+                lyricsOpen = lyricsOpen,
+                infoOpen = infoOpen,
+                infoFocus = appleBarFocus,
+                pageFocus = pageFocus,
+                onToggleLyrics = {
+                    lyricsOpen = !lyricsOpen
+                    lastInteraction = System.nanoTime()
+                },
+                onToggleInfo = {
+                    infoOpen = !infoOpen
+                    lastInteraction = System.nanoTime()
+                },
+                onInteraction = { lastInteraction = System.nanoTime() }
+            )
+        }
+
+        // The app's original transport bar, kept behind its own setting
+        AnimatedVisibility(
+            visible = barVisible && showClassicBar,
+            enter = fadeIn(tween(durationMillis = 300)) + slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+            ),
+            exit = fadeOut(tween(durationMillis = 300)) + slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
             ),
             modifier = Modifier
                 .padding(horizontal = 24.dp)
@@ -471,7 +555,6 @@ fun TvNowPlaying(
                 modifier = Modifier
                     .widthIn(max = 480.dp)
                     .fillMaxWidth()
-                    .wrapContentHeight()
                     .focusGroup(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -482,12 +565,14 @@ fun TvNowPlaying(
                         .focusGroup()
                         .onKeyEvent { keyEvent ->
                             if (keyEvent.type == KeyEventType.KeyDown) {
-                                if (controlsVisible) {
-                                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_UP || keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
-                                        controlsVisible = false
-                                        return@onKeyEvent true
-                                    }
-                                    interactionFlow.tryEmit(Unit)
+                                lastInteraction = System.nanoTime()
+                                if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                                    keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK
+                                ) {
+                                    barVisible = false
+                                    focusManager.clearFocus()
+                                    pageFocus.requestFocusSafely()
+                                    return@onKeyEvent true
                                 }
                             }
                             false
@@ -500,6 +585,7 @@ fun TvNowPlaying(
                             it,
                             Modifier
                                 .size(IconButtonDefaults.SmallButtonSize)
+                                .focusRequester(classicBarFocus)
                                 .focusProperties {
                                     up = FocusRequester.Cancel
                                 }
@@ -550,6 +636,132 @@ fun TvNowPlaying(
         }
     }
 }
+
+/**
+ * Apple's bar: the skip/lyrics circles above a full-width scrubber, and an Info pill
+ * in the bottom-left corner.
+ */
+@Composable
+private fun ApplePlayerBar(
+    mediaController: MediaController?,
+    color: Color,
+    isRadio: Boolean,
+    canShowLyrics: Boolean,
+    lyricsOpen: Boolean,
+    infoOpen: Boolean,
+    infoFocus: FocusRequester,
+    pageFocus: FocusRequester,
+    onToggleLyrics: () -> Unit,
+    onToggleInfo: () -> Unit,
+    onInteraction: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown) onInteraction()
+                false
+            },
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (canShowLyrics) {
+                BarCircleButton(
+                    icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
+                    contentDescription = "Lyrics",
+                    active = lyricsOpen,
+                    modifier = Modifier.focusProperties {
+                        down = pageFocus
+                        up = FocusRequester.Cancel
+                    },
+                    onClick = onToggleLyrics
+                )
+            }
+        }
+
+        if (!isRadio)
+            TvPlaybackProgress(mediaController = mediaController, color = color)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = onToggleInfo,
+                modifier = Modifier
+                    .focusRequester(infoFocus)
+                    .focusProperties {
+                        down = pageFocus
+                        up = FocusRequester.Cancel
+                    },
+                shape = ButtonDefaults.shape(shape = CircleShape),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+                colors = ButtonDefaults.colors(
+                    containerColor = Color.White.copy(alpha = 0.14f),
+                    disabledContainerColor = Color.White.copy(alpha = 0.14f),
+                    contentColor = color,
+                    disabledContentColor = color.copy(alpha = 0.3f),
+                    focusedContainerColor = Color.White,
+                    focusedContentColor = Color.Black
+                )
+            ) {
+                Text(
+                    text = "Info",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BarCircleButton(
+    icon: Int,
+    contentDescription: String,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.size(52.dp),
+        shape = ButtonDefaults.shape(shape = CircleShape),
+        contentPadding = PaddingValues(0.dp),
+        colors = ButtonDefaults.colors(
+            containerColor = Color.White.copy(alpha = if (active) 0.30f else 0.14f),
+            disabledContainerColor = Color.White.copy(alpha = 0.14f),
+            contentColor = Color.White,
+            disabledContentColor = Color.White.copy(alpha = 0.3f),
+            focusedContainerColor = Color.White,
+            focusedContentColor = Color.Black
+        )
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(26.dp)
+        )
+    }
+}
+
+private fun MediaController?.togglePlayback() {
+    val player = this ?: return
+    if (player.isPlaying) player.pause() else player.play()
+}
+
+/** requestFocus throws when the node is not attached; the bar may not be composed yet. */
+private fun FocusRequester.requestFocusSafely(): Boolean =
+    try {
+        requestFocus()
+        true
+    } catch (_: IllegalStateException) {
+        false
+    }
 
 @Composable
 private fun AlbumArtHero(metadata: MediaMetadata?, size: Dp) {

@@ -300,6 +300,35 @@ fun TvS_AppearanceScreen() {
                 )
                 */
 
+                // Which player bar the TV now-playing screen shows
+                val applePlayerBar by AppearanceSettingsManager(context).showApplePlayerBar.collectAsState(
+                    true
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.appearance_apple_player_bar),
+                    icon = ImageVector.vectorResource(R.drawable.rounded_tv_24),
+                    checked = applePlayerBar,
+                    onCheckedChange = {
+                        coroutineScope.launch {
+                            AppearanceSettingsManager(context).setShowApplePlayerBar(it)
+                        }
+                    }
+                )
+
+                val classicPlayerBar by AppearanceSettingsManager(context).showClassicPlayerBar.collectAsState(
+                    false
+                )
+                SettingsSwitchItem(
+                    title = stringResource(R.string.appearance_classic_player_bar),
+                    icon = ImageVector.vectorResource(R.drawable.s_m_playback),
+                    checked = classicPlayerBar,
+                    onCheckedChange = {
+                        coroutineScope.launch {
+                            AppearanceSettingsManager(context).setShowClassicPlayerBar(it)
+                        }
+                    }
+                )
+
                 // Track numbers in album view
                 val showTrackNumbers by AppearanceSettingsManager(context).showTrackNumbersFlow.collectAsState(
                     true

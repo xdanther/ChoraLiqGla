@@ -54,6 +54,8 @@ class AppearanceSettingsManager @Inject constructor(
         private val LYRICS_WORD_BOUNCE = booleanPreferencesKey("lyrics_word_bounce")
         private val USE_REFRESH_ANIMATION = booleanPreferencesKey("use_refresh_animation")
         private val SHOW_TRACK_NUMBERS = booleanPreferencesKey("show_track_numbers")
+        private val APPLE_PLAYER_BAR = booleanPreferencesKey("apple_player_bar")
+        private val CLASSIC_PLAYER_BAR = booleanPreferencesKey("classic_player_bar")
 
         private val OLED_PROTECTION_MODE = stringPreferencesKey("oled_protection")
         private val DISABLE_SCREEN_STANDBY = booleanPreferencesKey("disable_screen_standby")
@@ -229,6 +231,30 @@ class AppearanceSettingsManager @Inject constructor(
         withContext(NonCancellable) {
             context.dataStore.edit { preferences ->
                 preferences[SHOW_TRACK_NUMBERS] = showTrackNumbers
+            }
+        }
+    }
+
+    val showApplePlayerBar: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[APPLE_PLAYER_BAR] ?: true
+    }
+
+    suspend fun setShowApplePlayerBar(show: Boolean) {
+        withContext(NonCancellable) {
+            context.dataStore.edit { preferences ->
+                preferences[APPLE_PLAYER_BAR] = show
+            }
+        }
+    }
+
+    val showClassicPlayerBar: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[CLASSIC_PLAYER_BAR] ?: false
+    }
+
+    suspend fun setShowClassicPlayerBar(show: Boolean) {
+        withContext(NonCancellable) {
+            context.dataStore.edit { preferences ->
+                preferences[CLASSIC_PLAYER_BAR] = show
             }
         }
     }
