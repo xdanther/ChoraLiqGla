@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,12 +50,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -132,8 +131,9 @@ fun TvNowPlaying(
 
     val focusManager = LocalFocusManager.current
     val pageFocus = remember { FocusRequester() }
-    val appleBarFocus = remember { FocusRequester() }
+    val barFocus = remember { FocusRequester() }
     val classicBarFocus = remember { FocusRequester() }
+    var barFocusTicket by remember { mutableIntStateOf(0) }
 
     // The bar is a visiting guest: it fades away again so the artwork stays the main thing.
     LaunchedEffect(barVisible, lastInteraction, infoOpen) {
@@ -141,11 +141,19 @@ fun TvNowPlaying(
         if (infoOpen) return@LaunchedEffect
         delay(BAR_AUTO_HIDE_MILLIS)
         barVisible = false
-        pageFocus.requestFocusSafely()
     }
 
-    LaunchedEffect(Unit) {
-        pageFocus.requestFocusSafely()
+    // Focus can only follow the bar once its nodes exist, so it waits for composition
+    LaunchedEffect(barVisible, showAppleBar) {
+        if (barVisible) {
+            if (showAppleBar) barFocus.requestFocusSafely() else classicBarFocus.requestFocusSafely()
+        } else {
+            pageFocus.requestFocusSafely()
+        }
+    }
+
+    LaunchedEffect(barFocusTicket) {
+        if (barFocusTicket > 0) barFocus.requestFocusSafely()
     }
 
     val iconTextColor by animateColorAsState(
@@ -157,9 +165,18 @@ fun TvNowPlaying(
     val isRadio = metadata?.mediaType == MediaMetadata.MEDIA_TYPE_RADIO_STATION
     val canShowLyrics = !isRadio && lyrics != null
 
+    // A song with lyrics opens them on its own; closing them sticks for that track
+    LaunchedEffect(canShowLyrics, lyrics) {
+        if (canShowLyrics) lyricsOpen = true
+    }
+
     fun revealBar() {
         lastInteraction = System.nanoTime()
         barVisible = true
+    }
+
+    fun hideBar() {
+        barVisible = false
     }
 
     Box(
@@ -209,9 +226,13 @@ fun TvNowPlaying(
                             true
                         }
 
-                        KeyEvent.KEYCODE_DPAD_UP,
-                        KeyEvent.KEYCODE_DPAD_DOWN,
-                        KeyEvent.KEYCODE_MENU -> {
+                        // UP is the way into the bar: it comes up already selected
+                        KeyEvent.KEYCODE_DPAD_UP -> {
+                            revealBar()
+                            true
+                        }
+
+                        KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_MENU -> {
                             revealBar()
                             true
                         }
@@ -221,6 +242,19 @@ fun TvNowPlaying(
 
                     // Bar is up but the page still owns the focus.
                     else -> when (keyCode) {
+                        // UP again puts the bar away
+                        KeyEvent.KEYCODE_DPAD_UP -> {
+                            hideBar()
+                            true
+                        }
+
+                        KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            // Step back into the bar's buttons
+                            lastInteraction = System.nanoTime()
+                            barFocusTicket++
+                            true
+                        }
+
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
                             mediaController?.seekBack()
                             revealBar()
@@ -236,19 +270,6 @@ fun TvNowPlaying(
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                             mediaController.togglePlayback()
                             revealBar()
-                            true
-                        }
-
-                        KeyEvent.KEYCODE_DPAD_UP -> {
-                            revealBar()
-                            true
-                        }
-
-                        KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            // Step into the bar's own buttons.
-                            lastInteraction = System.nanoTime()
-                            if (showAppleBar) appleBarFocus.requestFocusSafely()
-                            else classicBarFocus.requestFocusSafely()
                             true
                         }
 
@@ -495,6 +516,29 @@ fun TvNowPlaying(
             }
         }
 
+        // Dim the bottom of the artwork while the bar is up so its text stays legible
+        AnimatedVisibility(
+            visible = barVisible && (showAppleBar || showClassicBar),
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(200)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(240.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.45f to Color.Black.copy(alpha = 0.35f),
+                            1f to Color.Black.copy(alpha = 0.75f)
+                        )
+                    )
+            )
+        }
+
         // The bar only exists while the remote is in use
         AnimatedVisibility(
             visible = barVisible && showAppleBar,
@@ -520,7 +564,7 @@ fun TvNowPlaying(
                 canShowLyrics = canShowLyrics,
                 lyricsOpen = lyricsOpen,
                 infoOpen = infoOpen,
-                infoFocus = appleBarFocus,
+                infoFocus = barFocus,
                 pageFocus = pageFocus,
                 onToggleLyrics = {
                     lyricsOpen = !lyricsOpen
@@ -664,25 +708,6 @@ private fun ApplePlayerBar(
             },
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (canShowLyrics) {
-                BarCircleButton(
-                    icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
-                    contentDescription = "Lyrics",
-                    active = lyricsOpen,
-                    modifier = Modifier.focusProperties {
-                        down = pageFocus
-                        up = FocusRequester.Cancel
-                    },
-                    onClick = onToggleLyrics
-                )
-            }
-        }
-
         if (!isRadio)
             TvPlaybackProgress(mediaController = mediaController, color = color)
 
@@ -713,6 +738,21 @@ private fun ApplePlayerBar(
                     text = "Info",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            if (canShowLyrics) {
+                BarCircleButton(
+                    icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
+                    contentDescription = "Lyrics",
+                    active = lyricsOpen,
+                    modifier = Modifier.focusProperties {
+                        down = pageFocus
+                        up = FocusRequester.Cancel
+                    },
+                    onClick = onToggleLyrics
                 )
             }
         }
@@ -792,29 +832,6 @@ private fun AlbumArtHero(metadata: MediaMetadata?, size: Dp) {
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         )
 
-        // Faint reflection under the artwork, the way Apple's player seats the cover
-        AsyncImage(
-            model = request,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.BottomCenter,
-            modifier = Modifier
-                .width(size)
-                .height(size * 0.30f)
-                .graphicsLayer {
-                    scaleY = -1f
-                    alpha = 0.2f
-                }
-                .drawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color.Black, Color.Transparent)
-                        ),
-                        blendMode = BlendMode.DstIn
-                    )
-                }
-        )
     }
 }
 
