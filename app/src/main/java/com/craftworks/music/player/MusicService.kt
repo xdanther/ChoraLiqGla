@@ -467,6 +467,31 @@ class ChoraMediaLibraryService : MediaLibraryService() {
     }
 
     private inner class LibrarySessionCallback : MediaLibrarySession.Callback {
+
+        /**
+         * The system media controls, the TV Now Playing card and notification actions
+         * all drive playback through this connection. Offer them the transport
+         * commands explicitly so play/pause and skip are never filtered out.
+         */
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            val playerCommands = player.availableCommands.buildUpon()
+                .addAll(
+                    Player.COMMAND_PLAY_PAUSE,
+                    Player.COMMAND_PREPARE,
+                    Player.COMMAND_SEEK_TO_NEXT,
+                    Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                    Player.COMMAND_SEEK_TO_PREVIOUS,
+                    Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
+                )
+                .build()
+
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailablePlayerCommands(playerCommands)
+                .build()
+        }
         override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
             serviceIOScope.launch {
                 println("ONPOSTCONNTECT MUSIC SERVICE!")
