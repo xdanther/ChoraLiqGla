@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -63,6 +64,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media.utils.MediaConstants.METADATA_KEY_IS_EXPLICIT
@@ -76,6 +79,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
+import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -83,6 +87,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.craftworks.music.R
 import com.craftworks.music.data.model.LibraryType
+import com.craftworks.music.data.model.artists
 import com.craftworks.music.data.model.Screen
 import com.craftworks.music.data.model.favorite
 import com.craftworks.music.data.model.id
@@ -177,7 +182,7 @@ fun TvAlbumDetails(
             )
         }
         var descriptionExpanded by remember { mutableStateOf(false) }
-        var infoOpen by remember { mutableStateOf(false) }
+        var showOptions by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) { playRequester.requestFocus() }
 
@@ -186,9 +191,11 @@ fun TvAlbumDetails(
                 .data(
                     currentProvider?.getImageUrl(
                         id = selectedAlbumId,
-                        itemType = LibraryType.ALBUM
+                        itemType = LibraryType.ALBUM,
+                        size = 1080
                     )
                 )
+                .size(1080)
                 .memoryCacheKey(selectedAlbumId)
                 .placeholderMemoryCacheKey(selectedAlbumId)
                 .crossfade(true)
@@ -217,11 +224,11 @@ fun TvAlbumDetails(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        scaleX = 1.3f
-                        scaleY = 1.3f
-                        alpha = 0.65f
+                        scaleX = 1.15f
+                        scaleY = 1.15f
+                        alpha = 0.92f
                     }
-                    .blur(60.dp)
+                    .blur(72.dp)
             )
 
             Box(
@@ -229,9 +236,9 @@ fun TvAlbumDetails(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            0f to Color.Black.copy(alpha = 0.42f),
-                            0.45f to Color.Black.copy(alpha = 0.62f),
-                            1f to Color.Black.copy(alpha = 0.88f)
+                            0f to Color.Black.copy(alpha = 0.26f),
+                            0.45f to Color.Black.copy(alpha = 0.46f),
+                            1f to Color.Black.copy(alpha = 0.78f)
                         )
                     )
             )
@@ -249,8 +256,7 @@ fun TvAlbumDetails(
                     contentDescription = album.title?.toString(),
                     modifier = Modifier
                         .size(coverSize)
-                        .shadow(26.dp, RoundedCornerShape(12.dp), clip = true)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(8.dp))
                 )
 
                 Column(
@@ -409,7 +415,7 @@ fun TvAlbumDetails(
                         Spacer(Modifier.weight(1f))
 
                         Button(
-                            onClick = { infoOpen = !infoOpen },
+                            onClick = { showOptions = true },
                             modifier = Modifier.size(40.dp),
                             shape = ButtonDefaults.shape(shape = CircleShape),
                             contentPadding = PaddingValues(0.dp),
@@ -532,19 +538,45 @@ fun TvAlbumDetails(
                 }
             }
 
-            AnimatedVisibility(
-                visible = infoOpen,
-                enter = fadeIn(tween(180)),
-                exit = fadeOut(tween(180)),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 30.dp, bottom = 56.dp)
-            ) {
-                AlbumInfoCard(
-                    album = album,
-                    songCount = songs.size,
-                    totalMinutes = totalMinutes,
-                    color = Color.White
+            if (showOptions) {
+                val artist = album.artists?.firstOrNull()
+                AlbumOptionsDialog(
+                    title = album.title?.toString() ?: "",
+                    artistName = album.artist?.toString() ?: "",
+                    canOpenArtist = artist != null,
+                    isStarred = isStarred,
+                    onGoToArtist = {
+                        showOptions = false
+                        artist?.let {
+                            navHostController.navigate(
+                                Screen.ArtistDetails(
+                                    it.id,
+                                    it.imageUrl ?: it.imageId?.let { imageId ->
+                                        currentProvider?.getImageUrl(imageId, LibraryType.ARTIST, 600)
+                                    }
+                                )
+                            ) { launchSingleTop = true }
+                        }
+                    },
+                    onPlayNext = {
+                        showOptions = false
+                        SongHelper.playNext(songs, mediaController)
+                    },
+                    onAddToQueue = {
+                        showOptions = false
+                        SongHelper.enqueue(songs, mediaController)
+                    },
+                    onDownload = {
+                        showOptions = false
+                        viewModel.downloadAlbum(songs)
+                    },
+                    onToggleLibrary = {
+                        showOptions = false
+                        if (isStarred) viewModel.unstarAlbum(selectedAlbumId)
+                        else viewModel.starAlbum(selectedAlbumId)
+                        isStarred = !isStarred
+                    },
+                    onDismiss = { showOptions = false }
                 )
             }
         }
@@ -584,56 +616,98 @@ private fun MoreDots() {
 }
 
 @Composable
-private fun AlbumInfoCard(
-    album: MediaMetadata,
-    songCount: Int,
-    totalMinutes: Int,
-    color: Color
+private fun AlbumOptionsDialog(
+    title: String,
+    artistName: String,
+    canOpenArtist: Boolean,
+    isStarred: Boolean,
+    onGoToArtist: () -> Unit,
+    onPlayNext: () -> Unit,
+    onAddToQueue: () -> Unit,
+    onDownload: () -> Unit,
+    onToggleLibrary: () -> Unit,
+    onDismiss: () -> Unit
 ) {
-    val format = album.extras?.getString("format")?.uppercase()
-    val labels = album.extras?.getString("recordLabels")
-    val date = formatReleaseDate(album.extras?.getString("releaseDate"))
+    val firstItem = remember { FocusRequester() }
+    val surface = MaterialTheme.colorScheme.surface
 
-    Column(
-        modifier = Modifier
-            .width(300.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.Black.copy(alpha = 0.72f))
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+    LaunchedEffect(Unit) {
+        runCatching { firstItem.requestFocus() }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Text(
-            text = album.title?.toString() ?: "",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = album.artist?.toString() ?: "",
-            fontSize = 13.sp,
-            color = color.copy(alpha = 0.7f),
-            maxLines = 1
-        )
-        date?.let {
-            Text(text = it, fontSize = 12.sp, color = color.copy(alpha = 0.55f))
-        }
-        Text(
-            text = "$songCount songs · $totalMinutes min",
-            fontSize = 12.sp,
-            color = color.copy(alpha = 0.55f)
-        )
-        listOfNotNull(format, labels).forEach {
-            Text(
-                text = it,
-                fontSize = 12.sp,
-                color = color.copy(alpha = 0.45f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(surface)
+                .padding(horizontal = 56.dp, vertical = 48.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 460.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = artistName,
+                    fontSize = 15.sp,
+                    color = Color.White.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                if (canOpenArtist)
+                    AlbumOptionItem(
+                        text = "Go to artist",
+                        modifier = Modifier.focusRequester(firstItem),
+                        onClick = onGoToArtist
+                    )
+
+                AlbumOptionItem(
+                    text = "Play next",
+                    modifier = if (canOpenArtist) Modifier else Modifier.focusRequester(firstItem),
+                    onClick = onPlayNext
+                )
+
+                AlbumOptionItem(text = "Add to queue", onClick = onAddToQueue)
+                AlbumOptionItem(text = "Download album", onClick = onDownload)
+                AlbumOptionItem(
+                    text = if (isStarred) "Remove from library" else "Add to library",
+                    onClick = onToggleLibrary
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun AlbumOptionItem(
+    text: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    ListItem(
+        selected = false,
+        headlineContent = { Text(text = text) },
+        modifier = modifier,
+        onClick = onClick
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
