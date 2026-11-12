@@ -111,6 +111,10 @@ import com.craftworks.music.data.repository.LyricsState
 import com.craftworks.music.managers.MediaProviderManager
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
 import com.craftworks.music.managers.settings.OLEDProtectionMode
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import kotlin.math.cos
+import kotlin.math.sin
 import com.craftworks.music.player.ChoraMediaLibraryService
 import com.craftworks.music.ui.elements.tv.TvHorizontalSongCard
 import com.craftworks.music.ui.playing.LyricsView
@@ -121,7 +125,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 /** How long the player bar lingers after the last remote key press. */
-private const val BAR_AUTO_HIDE_MILLIS = 6_500L
+private const val BAR_AUTO_HIDE_MILLIS = 5_000L
 
 @Preview(device = "id:tv_1080p", showBackground = true, showSystemUi = true)
 @Composable
@@ -414,7 +418,7 @@ fun TvNowPlaying(
 
                     // A wash built from the cover's own colours, drifting slowly
                     if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR)
-                        DriftingWash(palette)
+                        ArtworkWash(metadata)
 
                     if (sideBySideLyrics) {
                         // Lyrics get the right half, the artwork keeps the left
@@ -446,7 +450,7 @@ fun TvNowPlaying(
                                     )
                                     Text(
                                         text = metadata?.title?.toString().orEmpty(),
-                                        fontSize = 21.sp,
+                                        fontSize = 24.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = iconTextColor,
                                         maxLines = 1,
@@ -513,7 +517,7 @@ fun TvNowPlaying(
                                 text = metadata?.albumTitle?.toString()
                                     ?.ifBlank { null }
                                     ?: metadata?.artist?.toString().orEmpty(),
-                                fontSize = 20.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = iconTextColor.copy(alpha = 0.62f),
                                 textAlign = TextAlign.Center,
@@ -538,7 +542,7 @@ fun TvNowPlaying(
                                 )
                                 Text(
                                     text = metadata?.title?.toString().orEmpty(),
-                                    fontSize = 22.sp,
+                                    fontSize = 24.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = iconTextColor,
                                     maxLines = 1,
@@ -550,7 +554,7 @@ fun TvNowPlaying(
 
                             Text(
                                 text = metadata?.artist?.toString().orEmpty(),
-                                fontSize = 18.sp,
+                                fontSize = 15.sp,
                                 color = iconTextColor.copy(alpha = 0.60f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -570,7 +574,7 @@ fun TvNowPlaying(
                             metadata = metadata,
                             color = iconTextColor,
                             onGoToAlbum = onGoToAlbum,
-                            modifier = Modifier.padding(start = 48.dp, end = 48.dp, bottom = 146.dp)
+                            modifier = Modifier.padding(start = 40.dp, end = 40.dp, bottom = 132.dp)
                         )
                     }
                 }
@@ -811,7 +815,7 @@ private fun ApplePlayerBar(
                         up = FocusRequester.Cancel
                     },
                 shape = ButtonDefaults.shape(shape = CircleShape),
-                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
                 colors = ButtonDefaults.colors(
                     containerColor = Color.White.copy(alpha = 0.18f),
                     disabledContainerColor = Color.White.copy(alpha = 0.18f),
@@ -821,7 +825,7 @@ private fun ApplePlayerBar(
                     focusedContentColor = Color.Black
                 )
             ) {
-                Text(text = "Info", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text(text = "Info", fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
 
             Spacer(Modifier.weight(1f))
@@ -852,11 +856,11 @@ private fun BarCircleButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.size(52.dp),
+        modifier = modifier.size(38.dp),
         shape = ButtonDefaults.shape(shape = CircleShape),
         contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.colors(
-            containerColor = Color.White.copy(alpha = if (active) 0.30f else 0.14f),
+            containerColor = Color.White.copy(alpha = 0.14f),
             disabledContainerColor = Color.White.copy(alpha = 0.14f),
             contentColor = Color.White,
             disabledContentColor = Color.White.copy(alpha = 0.3f),
@@ -867,7 +871,7 @@ private fun BarCircleButton(
         Icon(
             painter = painterResource(icon),
             contentDescription = contentDescription,
-            modifier = Modifier.size(26.dp)
+            modifier = Modifier.size(18.dp)
         )
     }
 }
@@ -1137,7 +1141,7 @@ private fun TvLyricsPane(
     }
     val emphasisSpec: AnimationSpec<Float> =
         if (bounce) tween((2400 - speed).coerceIn(160, 700)) else snap()
-    val size = if (largeText) 34.sp else 28.sp
+    val size = if (largeText) 28.sp else 22.sp
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         LazyColumn(
@@ -1259,7 +1263,7 @@ private fun TrackInfoCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
             .background(Color.Black.copy(alpha = 0.34f))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
@@ -1271,8 +1275,8 @@ private fun TrackInfoCard(
             contentScale = ContentScale.Crop,
             fallback = painterResource(R.drawable.placeholder),
             modifier = Modifier
-                .size(66.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .size(60.dp)
+                .clip(RoundedCornerShape(6.dp))
         )
 
         Spacer(Modifier.width(16.dp))
@@ -1283,7 +1287,7 @@ private fun TrackInfoCard(
         ) {
             Text(
                 text = metadata?.title?.toString().orEmpty(),
-                fontSize = 22.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 maxLines = 1,
@@ -1295,7 +1299,7 @@ private fun TrackInfoCard(
                     metadata?.artist?.toString()?.takeIf { it.isNotBlank() },
                     metadata?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
                 ).joinToString(" – "),
-                fontSize = 18.sp,
+                fontSize = 14.sp,
                 color = Color.White.copy(alpha = 0.88f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1304,14 +1308,14 @@ private fun TrackInfoCard(
             if (durationMs > 0)
                 Text(
                     text = "$minutes min, $seconds secs",
-                    fontSize = 16.sp,
+                    fontSize = 13.sp,
                     color = Color.White.copy(alpha = 0.75f)
                 )
 
             if (lossless)
                 Text(
                     text = "◐  Lossless",
-                    fontSize = 15.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.White,
                     modifier = Modifier
@@ -1331,7 +1335,7 @@ private fun TrackInfoCard(
                     .focusRequester(ctaFocus)
                     .focusProperties { up = FocusRequester.Cancel },
                 shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
-                contentPadding = PaddingValues(horizontal = 28.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                 colors = ButtonDefaults.colors(
                     containerColor = Color(0xFFC8DDFF),
                     disabledContainerColor = Color(0xFFC8DDFF),
@@ -1341,58 +1345,71 @@ private fun TrackInfoCard(
                     focusedContentColor = Color.Black
                 )
             ) {
-                Text(text = "Go to Album", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Go to Album", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
     }
 }
 
-/** The wash the reference player shows: the cover's colours drifting, not the cover. */
+/**
+ * Apple's player background is not a blurred cover: it is several copies of the
+ * oversaturated artwork at 25/50/80/125% of the viewport, twisted and blurred, the
+ * smaller ones orbiting. This is the same recipe approximated with four layers.
+ */
 @Composable
-private fun DriftingWash(palette: List<Color>) {
-    val drift = rememberInfiniteTransition(label = "wash drift")
-    val scale by drift.animateFloat(
-        initialValue = 1.18f,
-        targetValue = 1.38f,
-        animationSpec = infiniteRepeatable(tween(30_000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "wash scale"
-    )
-    val shiftX by drift.animateFloat(
-        initialValue = -70f,
-        targetValue = 70f,
-        animationSpec = infiniteRepeatable(tween(42_000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "wash x"
-    )
-    val shiftY by drift.animateFloat(
-        initialValue = -40f,
-        targetValue = 40f,
-        animationSpec = infiniteRepeatable(tween(36_000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "wash y"
+private fun ArtworkWash(metadata: MediaMetadata?) {
+    val drift = rememberInfiniteTransition(label = "artwork wash")
+    val angle by drift.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(140_000, easing = LinearEasing)),
+        label = "wash angle"
     )
 
-    val fallback = listOf(Color(0xFF6B1B1B), Color(0xFFB23A1E), Color(0xFF1A0C0C))
-    val colors = if (palette.size >= 2) palette else fallback
+    val context = LocalContext.current
+    val saturation = remember { ColorMatrix().apply { setToSaturation(1.75f) } }
+    val request = remember(metadata?.artworkUri) {
+        ImageRequest.Builder(context)
+            .data(metadata?.artworkUri)
+            .crossfade(true)
+            .build()
+    }
 
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val width = maxWidth
+        val layers = listOf(
+            Triple(1.25f, 0.10f, 0f),
+            Triple(0.80f, 0.14f, 120f),
+            Triple(0.50f, 0.07f, 240f),
+            Triple(0.25f, 0.03f, 300f)
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = shiftX
-                    translationY = shiftY
-                }
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            colors[0],
-                            colors.getOrNull(1) ?: colors[0],
-                            colors.getOrNull(2) ?: colors[0],
-                            colors.getOrNull(1) ?: colors[0]
-                        )
-                    )
-                )
+                .background(Color(0xFF14090A))
         )
+
+        layers.forEach { (scale, radius, phase) ->
+            val radians = Math.toRadians((angle + phase).toDouble())
+            val dx = (cos(radians) * radius * width.value * 2f).toFloat()
+            val dy = (sin(radians) * radius * width.value).toFloat()
+
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                colorFilter = ColorFilter.colorMatrix(saturation),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(width * scale)
+                    .graphicsLayer {
+                        translationX = dx.dp.toPx()
+                        translationY = dy.dp.toPx()
+                        rotationZ = angle / 8f + phase / 4f
+                    }
+                    .blur(72.dp)
+            )
+        }
 
         Box(
             modifier = Modifier
@@ -1400,9 +1417,9 @@ private fun DriftingWash(palette: List<Color>) {
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            Color.Black.copy(alpha = 0.24f),
+                            Color.Black.copy(alpha = 0.22f),
                             Color.Transparent,
-                            Color.Black.copy(alpha = 0.36f)
+                            Color.Black.copy(alpha = 0.34f)
                         )
                     )
                 )

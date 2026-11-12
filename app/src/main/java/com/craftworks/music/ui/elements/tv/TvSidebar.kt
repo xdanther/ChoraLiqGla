@@ -319,7 +319,7 @@ private fun TvSidebarPanel(
 
             Text(
                 text = username,
-                fontSize = 15.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White,
                 maxLines = 1,
@@ -422,7 +422,7 @@ private fun TvSidebarItem(
         Text(
             text = label,
             color = contentColor,
-            fontSize = 16.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
