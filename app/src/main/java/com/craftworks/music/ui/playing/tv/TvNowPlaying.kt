@@ -1071,7 +1071,7 @@ private fun TvLyricsPane(
         val controller = mediaController ?: return@LaunchedEffect
         while (true) {
             positionMs = controller.currentPosition.toInt()
-            delay(400)
+            delay(250)
         }
     }
 

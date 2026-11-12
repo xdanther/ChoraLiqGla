@@ -61,6 +61,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
@@ -133,6 +135,11 @@ fun TvSidebarScaffold(
 
     val isNowPlaying = backStackEntry.isOnRoute(Screen.NowPlayingLandscape)
     val backdrop = rememberGraphicsLayer()
+    val density = LocalDensity.current
+
+    // Measured from the card so the frozen patch matches it exactly, and kept across
+    // openings so the frost is already the right size on the first frame.
+    var panelHeight by remember { mutableStateOf(0) }
     var isSidebarOpen by rememberSaveable { mutableStateOf(false) }
     val firstItemFocusRequester = remember { FocusRequester() }
 
@@ -187,6 +194,34 @@ fun TvSidebarScaffold(
             )
         }
 
+        // The frost is a sibling of the card rather than part of it: the card slides
+        // over a ground that is already blurred in its resting place, so the blur can
+        // never trail behind the animation.
+        AnimatedVisibility(
+            visible = isSidebarOpen && !isNowPlaying && panelHeight > 0,
+            enter = fadeIn(tween(240)),
+            exit = fadeOut(tween(140)),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 20.dp, top = 20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(SidebarWidth)
+                    .height(with(density) { panelHeight.toDp() })
+                    .graphicsLayer {
+                        shape = RoundedCornerShape(26.dp)
+                        clip = true
+                        renderEffect = BlurEffect(56f, 56f, TileMode.Clamp)
+                    }
+                    .drawWithContent {
+                        translate(left = -20.dp.toPx(), top = -20.dp.toPx()) {
+                            drawLayer(backdrop)
+                        }
+                    }
+            )
+        }
+
         AnimatedVisibility(
             visible = isSidebarOpen && !isNowPlaying,
             enter = fadeIn(tween(200)) + slideInHorizontally(
@@ -208,29 +243,12 @@ fun TvSidebarScaffold(
             modifier = Modifier.align(Alignment.TopStart)
         ) {
             Box(modifier = Modifier.padding(start = 20.dp, top = 20.dp)) {
-                // Only the patch of page the card covers is blurred: the recording is
-                // full-screen, so it is shifted back by the card's own inset and
-                // clipped to the card's outline.
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .graphicsLayer {
-                            shape = RoundedCornerShape(26.dp)
-                            clip = true
-                            renderEffect = BlurEffect(56f, 56f, TileMode.Clamp)
-                        }
-                        .drawWithContent {
-                            translate(left = -20.dp.toPx(), top = -20.dp.toPx()) {
-                                drawLayer(backdrop)
-                            }
-                        }
-                )
-
                 TvSidebarPanel(
                     navItems = navItems,
                     backStackEntry = backStackEntry,
                     isPlayingVisible = isPlayingVisible,
-                    firstItemFocusRequester = firstItemFocusRequester
+                    firstItemFocusRequester = firstItemFocusRequester,
+                    modifier = Modifier.onGloballyPositioned { panelHeight = it.size.height }
                 ) { screen ->
                     if (!backStackEntry.isOnRoute(screen)) navController.navigate(screen) {
                         launchSingleTop = true
@@ -276,7 +294,7 @@ private fun TvSidebarPanel(
             // over whatever artwork sits behind the panel.
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.14f), Color.Black.copy(alpha = 0.26f))
+                    listOf(Color.White.copy(alpha = 0.12f), Color.Black.copy(alpha = 0.24f))
                 )
             )
             .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(26.dp))
