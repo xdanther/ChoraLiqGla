@@ -3,6 +3,9 @@
 package com.craftworks.music.ui.playing.tv
 
 import android.view.KeyEvent
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import android.os.Build
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -1738,115 +1741,134 @@ private fun TrackInfoCard(
 }
 
 /**
- * Apple's player background is a field of colour taken from the artwork, not the
- * artwork itself: a few large, soft blobs of its most saturated colours drifting
- * slowly while each one morphs into the next colour. No part of the cover is drawn,
- * so no edges or detail can show through the wash.
+ * The player background is a colour field computed on the GPU from the artwork's
+ * palette: value noise is domain-warped by itself a couple of times, so the colours
+ * bleed into each other in long liquid bands with no shape, edge or tiling to see.
+ * Drawing gradients or circles into the canvas always left visible geometry; a
+ * shader has no geometry at all.
  */
 @Composable
 private fun PaletteWash(palette: List<Color>) {
-    val seeds = remember(palette) { washSeeds(palette) }
+    val colors = remember(palette) { washColors(palette) }
 
     val transition = rememberInfiniteTransition(label = "palette wash")
-    val drift by transition.animateFloat(
+    val time by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(28_000, easing = LinearEasing)),
-        label = "wash drift"
-    )
-    val breathe by transition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(tween(19_000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "wash breathe"
+        targetValue = 4000f,
+        animationSpec = infiniteRepeatable(tween(180_000, easing = LinearEasing)),
+        label = "wash time"
     )
 
-    Canvas(Modifier.fillMaxSize()) {
-        val width = size.width
-        val height = size.height
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val shader = remember { android.graphics.RuntimeShader(WASH_SHADER) }
+        val paint = remember { android.graphics.Paint().apply { isAntiAlias = false } }
 
-        drawRect(
-            brush = Brush.linearGradient(
-                colors = listOf(seeds.base, seeds.base.copy(alpha = 0.78f), seeds.base),
-                start = Offset(0f, 0f),
-                end = Offset(width, height)
-            )
-        )
+        Canvas(Modifier.fillMaxSize()) {
+            shader.setFloatUniform("uResolution", size.width, size.height)
+            shader.setFloatUniform("uTime", time)
+            shader.setFloatUniform("uColorA", colors[0].red, colors[0].green, colors[0].blue)
+            shader.setFloatUniform("uColorB", colors[1].red, colors[1].green, colors[1].blue)
+            shader.setFloatUniform("uColorC", colors[2].red, colors[2].green, colors[2].blue)
+            shader.setFloatUniform("uColorD", colors[3].red, colors[3].green, colors[3].blue)
 
-        seeds.blobs.forEach { blob ->
-            val cycle = (drift * blob.speed + blob.phase) % 1f
-            val angle = cycle * 2f * Math.PI.toFloat()
-
-            val center = Offset(
-                x = width * (0.5f + blob.orbitX * cos(angle)),
-                y = height * (0.5f + blob.orbitY * sin(angle))
-            )
-            val radius = maxOf(width, height) * blob.radius * breathe
-
-            val mix = 0.5f + 0.5f * sin(angle + blob.phase)
-            val color = lerp(blob.from, blob.to, mix)
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(color.copy(alpha = 0.85f), color.copy(alpha = 0.26f), Color.Transparent),
-                    center = center,
-                    radius = radius
-                ),
-                radius = radius,
-                center = center
-            )
+            paint.shader = shader
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawRect(0f, 0f, size.width, size.height, paint)
+            }
         }
-
-        // Keep the labels at the top and the bar at the bottom legible on any palette
-        drawRect(
-            brush = Brush.verticalGradient(
-                0f to Color.Black.copy(alpha = 0.30f),
-                0.42f to Color.Transparent,
-                1f to Color.Black.copy(alpha = 0.42f)
-            )
+    } else {
+        // Pre-Android 12: no runtime shaders, so two soft bands of the same colours
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(colors[0], colors[1], colors[2], colors[3]),
+                        start = Offset.Zero,
+                        end = Offset(1400f, 900f)
+                    )
+                )
         )
     }
 }
 
-private class WashBlob(
-    val from: Color,
-    val to: Color,
-    val orbitX: Float,
-    val orbitY: Float,
-    val phase: Float,
-    val radius: Float,
-    val speed: Float
-)
+private const val WASH_SHADER = """
+uniform float2 uResolution;
+uniform float uTime;
+uniform float3 uColorA;
+uniform float3 uColorB;
+uniform float3 uColorC;
+uniform float3 uColorD;
 
-private class WashSeeds(val base: Color, val blobs: List<WashBlob>)
+float hash21(float2 p) {
+    p = fract(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
 
-private fun washSeeds(palette: List<Color>): WashSeeds {
+float valueNoise(float2 p) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float fbm(float2 p) {
+    float total = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 4; i++) {
+        total += amplitude * valueNoise(p);
+        p *= 2.03;
+        amplitude *= 0.5;
+    }
+    return total;
+}
+
+half4 main(float2 fragCoord) {
+    float2 uv = fragCoord / uResolution;
+    float2 p = uv * 2.6;
+
+    float t = uTime * 0.012;
+    float2 warpA = float2(fbm(p + float2(0.0, t)), fbm(p + float2(4.7, -t)));
+    float2 warpB = float2(
+        fbm(p + 2.2 * warpA + float2(1.7, 9.2) + t * 0.55),
+        fbm(p + 2.2 * warpA + float2(8.3, 2.8) - t * 0.45)
+    );
+    float field = fbm(p + 1.8 * warpB);
+
+    float3 color = mix(uColorA, uColorB, smoothstep(0.16, 0.84, field));
+    color = mix(color, uColorC, smoothstep(0.28, 0.92, warpB.y));
+    color = mix(color, uColorD, smoothstep(0.42, 0.96, warpA.x));
+
+    float2 centered = uv - 0.5;
+    float vignette = 1.0 - dot(centered, centered) * 0.9;
+    color *= clamp(vignette, 0.52, 1.0);
+
+    return half4(color.r, color.g, color.b, 1.0);
+}
+"""
+
+private fun washColors(palette: List<Color>): List<Color> {
     val usable = palette.filter { it.alpha > 0.5f }
     val source = if (usable.size >= 2) usable else listOf(
-        Color(0xFF7A2E1E),
-        Color(0xFF3A1F52),
-        Color(0xFF14364A)
+        Color(0xFF8A3524),
+        Color(0xFF43245C),
+        Color(0xFF16394F),
+        Color(0xFF5C2338)
     )
 
-    fun boost(color: Color, saturation: Float, value: Float): Color {
+    fun boost(color: Color): Color {
         val hsv = FloatArray(3)
         android.graphics.Color.colorToHSV(color.toArgb(), hsv)
-        hsv[1] = (hsv[1] * saturation).coerceIn(0f, 1f)
-        hsv[2] = (hsv[2] * value).coerceIn(0.10f, 0.95f)
+        hsv[1] = (hsv[1] * 1.7f).coerceIn(0f, 1f)
+        hsv[2] = (hsv[2] * 0.82f).coerceIn(0.14f, 0.72f)
         return Color(android.graphics.Color.HSVToColor(hsv))
     }
 
-    val colors = source.map { boost(it, saturation = 1.6f, value = 0.95f) }
-    val base = boost(source.first(), saturation = 1.3f, value = 0.28f)
-
-    fun at(index: Int) = colors[index % colors.size]
-
-    return WashSeeds(
-        base = base,
-        blobs = listOf(
-            WashBlob(at(0), at(3), orbitX = 0.20f, orbitY = 0.10f, phase = 0.0f, radius = 0.52f, speed = 1.0f),
-            WashBlob(at(1), at(4), orbitX = 0.26f, orbitY = 0.14f, phase = 0.37f, radius = 0.44f, speed = 0.62f),
-            WashBlob(at(2), at(5), orbitX = 0.30f, orbitY = 0.16f, phase = 0.71f, radius = 0.38f, speed = 0.45f)
-        )
-    )
+    val boosted = source.map { boost(it) }
+    return List(4) { index -> boosted[index % boosted.size] }
 }
