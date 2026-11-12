@@ -74,6 +74,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
@@ -114,8 +116,6 @@ import com.craftworks.music.data.repository.LyricsState
 import com.craftworks.music.managers.MediaProviderManager
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
 import com.craftworks.music.managers.settings.OLEDProtectionMode
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.foundation.Canvas
@@ -439,7 +439,7 @@ fun TvNowPlaying(
 
                     // A wash built from the cover's own colours, drifting slowly
                     if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR)
-                        ArtworkWash(metadata)
+                        PaletteWash(palette)
 
                     if (sideBySideLyrics) {
                         // Lyrics get the right half, the artwork keeps the left
@@ -1738,78 +1738,115 @@ private fun TrackInfoCard(
 }
 
 /**
- * Apple's player background is not a blurred cover: it is several copies of the
- * oversaturated artwork at 25/50/80/125% of the viewport, twisted and blurred, the
- * smaller ones orbiting. This is the same recipe approximated with four layers.
+ * Apple's player background is a field of colour taken from the artwork, not the
+ * artwork itself: a few large, soft blobs of its most saturated colours drifting
+ * slowly while each one morphs into the next colour. No part of the cover is drawn,
+ * so no edges or detail can show through the wash.
  */
 @Composable
-private fun ArtworkWash(metadata: MediaMetadata?) {
-    val drift = rememberInfiniteTransition(label = "artwork wash")
-    val angle by drift.animateFloat(
+private fun PaletteWash(palette: List<Color>) {
+    val seeds = remember(palette) { washSeeds(palette) }
+
+    val transition = rememberInfiniteTransition(label = "palette wash")
+    val drift by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(140_000, easing = LinearEasing)),
-        label = "wash angle"
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(28_000, easing = LinearEasing)),
+        label = "wash drift"
+    )
+    val breathe by transition.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(19_000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "wash breathe"
     )
 
-    val context = LocalContext.current
-    val saturation = remember { ColorMatrix().apply { setToSaturation(1.75f) } }
-    val request = remember(metadata?.artworkUri) {
-        ImageRequest.Builder(context)
-            .data(metadata?.artworkUri)
-            .crossfade(true)
-            .build()
-    }
+    Canvas(Modifier.fillMaxSize()) {
+        val width = size.width
+        val height = size.height
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val width = maxWidth
-        val layers = listOf(
-            Triple(1.25f, 0.10f, 0f),
-            Triple(0.80f, 0.14f, 120f),
-            Triple(0.50f, 0.07f, 240f),
-            Triple(0.25f, 0.03f, 300f)
+        drawRect(
+            brush = Brush.linearGradient(
+                colors = listOf(seeds.base, seeds.base.copy(alpha = 0.78f), seeds.base),
+                start = Offset(0f, 0f),
+                end = Offset(width, height)
+            )
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF14090A))
-        )
+        seeds.blobs.forEach { blob ->
+            val cycle = (drift * blob.speed + blob.phase) % 1f
+            val angle = cycle * 2f * Math.PI.toFloat()
 
-        layers.forEach { (scale, radius, phase) ->
-            val radians = Math.toRadians((angle + phase).toDouble())
-            val dx = (cos(radians) * radius * width.value * 2f).toFloat()
-            val dy = (sin(radians) * radius * width.value).toFloat()
+            val center = Offset(
+                x = width * (0.5f + blob.orbitX * cos(angle)),
+                y = height * (0.5f + blob.orbitY * sin(angle))
+            )
+            val radius = maxOf(width, height) * blob.radius * breathe
 
-            AsyncImage(
-                model = request,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                colorFilter = ColorFilter.colorMatrix(saturation),
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(width * scale)
-                    .graphicsLayer {
-                        translationX = dx.dp.toPx()
-                        translationY = dy.dp.toPx()
-                        rotationZ = angle / 8f + phase / 4f
-                    }
-                    .blur(72.dp)
+            val mix = 0.5f + 0.5f * sin(angle + blob.phase)
+            val color = lerp(blob.from, blob.to, mix)
+
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(color.copy(alpha = 0.85f), color.copy(alpha = 0.26f), Color.Transparent),
+                    center = center,
+                    radius = radius
+                ),
+                radius = radius,
+                center = center
             )
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.Black.copy(alpha = 0.22f),
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.34f)
-                        )
-                    )
-                )
+        // Keep the labels at the top and the bar at the bottom legible on any palette
+        drawRect(
+            brush = Brush.verticalGradient(
+                0f to Color.Black.copy(alpha = 0.30f),
+                0.42f to Color.Transparent,
+                1f to Color.Black.copy(alpha = 0.42f)
+            )
         )
     }
+}
+
+private class WashBlob(
+    val from: Color,
+    val to: Color,
+    val orbitX: Float,
+    val orbitY: Float,
+    val phase: Float,
+    val radius: Float,
+    val speed: Float
+)
+
+private class WashSeeds(val base: Color, val blobs: List<WashBlob>)
+
+private fun washSeeds(palette: List<Color>): WashSeeds {
+    val usable = palette.filter { it.alpha > 0.5f }
+    val source = if (usable.size >= 2) usable else listOf(
+        Color(0xFF7A2E1E),
+        Color(0xFF3A1F52),
+        Color(0xFF14364A)
+    )
+
+    fun boost(color: Color, saturation: Float, value: Float): Color {
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(color.toArgb(), hsv)
+        hsv[1] = (hsv[1] * saturation).coerceIn(0f, 1f)
+        hsv[2] = (hsv[2] * value).coerceIn(0.10f, 0.95f)
+        return Color(android.graphics.Color.HSVToColor(hsv))
+    }
+
+    val colors = source.map { boost(it, saturation = 1.6f, value = 0.95f) }
+    val base = boost(source.first(), saturation = 1.3f, value = 0.28f)
+
+    fun at(index: Int) = colors[index % colors.size]
+
+    return WashSeeds(
+        base = base,
+        blobs = listOf(
+            WashBlob(at(0), at(3), orbitX = 0.20f, orbitY = 0.10f, phase = 0.0f, radius = 0.52f, speed = 1.0f),
+            WashBlob(at(1), at(4), orbitX = 0.26f, orbitY = 0.14f, phase = 0.37f, radius = 0.44f, speed = 0.62f),
+            WashBlob(at(2), at(5), orbitX = 0.30f, orbitY = 0.16f, phase = 0.71f, radius = 0.38f, speed = 0.45f)
+        )
+    )
 }
