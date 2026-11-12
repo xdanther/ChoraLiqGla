@@ -24,6 +24,10 @@ fun signingSetting(environmentVariable: String, propertyName: String): String? =
 
 val releaseStoreFile = signingSetting("SIGNING_STORE_FILE", "storeFile")
 
+// -PquickRelease trades APK size for build time: no R8, no resource shrinking.
+// Wanted for iteration builds that only need to install and run.
+val quickRelease = providers.gradleProperty("quickRelease").isPresent
+
 android {
     namespace = "com.craftworks.music"
     compileSdk = 37
@@ -62,8 +66,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = !quickRelease
+            isShrinkResources = !quickRelease
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
