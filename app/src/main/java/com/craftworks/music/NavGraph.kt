@@ -216,12 +216,14 @@ fun SetupNavGraph(
                     val albumId = backStackEntry.toRoute<Screen.AlbumDetails>().albumId
                     val imageUri = backStackEntry.toRoute<Screen.AlbumDetails>().imageUri
                     if (isTv)
-                        TvAlbumDetails(
-                            albumId,
-                            imageUri.toUri(),
-                            mediaController,
-                            navController
-                        )
+                        TvSidebarScaffold(navController, mediaController) {
+                            TvAlbumDetails(
+                                albumId,
+                                imageUri.toUri(),
+                                mediaController,
+                                navController
+                            )
+                        }
                     else
                         AlbumDetails(
                             albumId,
@@ -257,7 +259,15 @@ fun SetupNavGraph(
                     val viewModel: ArtistsScreenViewModel = hiltViewModel(parentEntry)
 
                     if (isTv)
-                        TvArtistDetailsScreen(artistId, imageUri, navController, mediaController, viewModel)
+                        TvSidebarScaffold(navController, mediaController) {
+                            TvArtistDetailsScreen(
+                                artistId,
+                                imageUri,
+                                navController,
+                                mediaController,
+                                viewModel
+                            )
+                        }
                     else
                         ArtistDetails(artistId, imageUri, navController, mediaController, viewModel)
                 }
@@ -289,7 +299,15 @@ fun SetupNavGraph(
                     val viewModel: PlaylistScreenViewModel = hiltViewModel(parentEntry)
 
                     if (isTv)
-                        TvPlaylistDetails(playlistId, imageUri, navController, mediaController, viewModel)
+                        TvSidebarScaffold(navController, mediaController) {
+                            TvPlaylistDetails(
+                                playlistId,
+                                imageUri,
+                                navController,
+                                mediaController,
+                                viewModel
+                            )
+                        }
                     else
                         PlaylistDetails(playlistId, imageUri, navController, mediaController, viewModel)
                 }
