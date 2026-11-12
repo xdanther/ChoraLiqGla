@@ -92,6 +92,8 @@ fun NowPlayingContent(
             mediaController,
             iconTextColor,
             metadata,
+            onDownload = { metadata?.let { viewModel.downloadSong(it) } },
+            onRefreshLyrics = { viewModel.refreshLyrics(metadata) },
             onGoToAlbum = {
                 val albumId = metadata?.extras?.getString("albumId")
                 if (!albumId.isNullOrBlank()) {

@@ -50,6 +50,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -128,6 +129,7 @@ fun TvNowPlaying(
     iconColor: Color = Color.Black,
     metadata: MediaMetadata? = null,
     onGoToAlbum: () -> Unit = {},
+    onDownload: () -> Unit = {},
     onRefreshLyrics: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -142,6 +144,7 @@ fun TvNowPlaying(
     var barVisible by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
     var lyricsOpen by remember { mutableStateOf(false) }
+    var sleepTimerOpen by remember { mutableStateOf(false) }
     var lastInteraction by remember { mutableLongStateOf(0L) }
 
     val lyrics by LyricsState.lyrics.collectAsStateWithLifecycle()
@@ -573,6 +576,9 @@ fun TvNowPlaying(
                             metadata = metadata,
                             color = iconTextColor,
                             onGoToAlbum = onGoToAlbum,
+                            onRefreshLyrics = onRefreshLyrics,
+                            onPlayNext = { mediaController.insertAfterCurrent() },
+                            onAddToQueue = { mediaController.appendToQueue() },
                             modifier = Modifier.padding(start = 40.dp, bottom = 150.dp)
                         )
                     }
@@ -602,6 +608,15 @@ fun TvNowPlaying(
                     )
             )
         }
+
+        if (sleepTimerOpen)
+            TvSleepTimerSheet(
+                onDismiss = { sleepTimerOpen = false },
+                onPick = { minutes ->
+                    ChoraMediaLibraryService.getInstance()?.setSleepTimer(minutes)
+                    sleepTimerOpen = false
+                }
+            )
 
         // The bar only exists while the remote is in use
         AnimatedVisibility(
@@ -644,6 +659,8 @@ fun TvNowPlaying(
                     infoOpen = !infoOpen
                     lastInteraction = System.nanoTime()
                 },
+                onDownload = onDownload,
+                onOpenSleepTimer = { sleepTimerOpen = true },
                 onInteraction = { lastInteraction = System.nanoTime() }
             )
         }
@@ -769,6 +786,8 @@ private fun ApplePlayerBar(
     onDismiss: () -> Unit,
     onToggleLyrics: () -> Unit,
     onToggleInfo: () -> Unit,
+    onDownload: () -> Unit,
+    onOpenSleepTimer: () -> Unit,
     onInteraction: () -> Unit
 ) {
     Column(
@@ -831,17 +850,41 @@ private fun ApplePlayerBar(
 
             Spacer(Modifier.width(18.dp))
 
-            if (canShowLyrics) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 BarCircleButton(
-                    icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
-                    contentDescription = "Lyrics",
-                    active = lyricsOpen,
+                    icon = R.drawable.rounded_download_24,
+                    contentDescription = "Download",
+                    active = false,
                     modifier = Modifier.focusProperties {
                         down = pageFocus
                         up = FocusRequester.Cancel
                     },
-                    onClick = onToggleLyrics
+                    onClick = onDownload
                 )
+
+                BarCircleButton(
+                    icon = R.drawable.rounded_timer_24,
+                    contentDescription = "Sleep timer",
+                    active = false,
+                    modifier = Modifier.focusProperties {
+                        down = pageFocus
+                        up = FocusRequester.Cancel
+                    },
+                    onClick = onOpenSleepTimer
+                )
+
+                if (canShowLyrics) {
+                    BarCircleButton(
+                        icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
+                        contentDescription = "Lyrics",
+                        active = lyricsOpen,
+                        modifier = Modifier.focusProperties {
+                            down = pageFocus
+                            up = FocusRequester.Cancel
+                        },
+                        onClick = onToggleLyrics
+                    )
+                }
             }
         }
     }
@@ -875,6 +918,19 @@ private fun BarCircleButton(
             modifier = Modifier.size(26.dp)
         )
     }
+}
+
+private fun MediaController?.insertAfterCurrent() {
+    val player = this ?: return
+    val item = player.currentMediaItem ?: return
+    val index = (player.currentMediaItemIndex + 1).coerceAtMost(player.mediaItemCount)
+    player.addMediaItem(index, item)
+}
+
+private fun MediaController?.appendToQueue() {
+    val player = this ?: return
+    val item = player.currentMediaItem ?: return
+    player.addMediaItem(item)
 }
 
 private fun MediaController?.togglePlayback() {
@@ -1161,10 +1217,77 @@ private fun TvLyricsPane(
 }
 
 @Composable
+private fun TvSleepTimerSheet(
+    onDismiss: () -> Unit,
+    onPick: (Int) -> Unit
+) {
+    val first = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .width(320.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF1C1C1E))
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Sleep timer",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
+            listOf(15, 30, 45, 60).forEachIndexed { index, minutes ->
+                Button(
+                    onClick = { onPick(minutes) },
+                    modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
+                    shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color.White.copy(alpha = 0.08f),
+                        disabledContainerColor = Color.White.copy(alpha = 0.08f),
+                        contentColor = Color.White,
+                        disabledContentColor = Color.White.copy(alpha = 0.3f),
+                        focusedContainerColor = Color.White,
+                        focusedContentColor = Color.Black
+                    )
+                ) {
+                    Text(text = "$minutes minutes", fontSize = 15.sp)
+                }
+            }
+
+            Button(
+                onClick = { onPick(0) },
+                shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                colors = ButtonDefaults.colors(
+                    containerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    contentColor = Color.White.copy(alpha = 0.7f),
+                    disabledContentColor = Color.White.copy(alpha = 0.3f),
+                    focusedContainerColor = Color.White,
+                    focusedContentColor = Color.Black
+                )
+            ) {
+                Text(text = "Turn off", fontSize = 15.sp)
+            }
+        }
+    }
+}
+
+@Composable
 private fun TrackInfoCard(
     metadata: MediaMetadata?,
     color: Color,
     onGoToAlbum: () -> Unit = {},
+    onRefreshLyrics: () -> Unit = {},
+    onPlayNext: () -> Unit = {},
+    onAddToQueue: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val ctaFocus = remember { FocusRequester() }
@@ -1258,6 +1381,8 @@ private fun TrackInfoCard(
                 )
         }
 
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (albumId.isNotBlank())
         Button(
             onClick = onGoToAlbum,
@@ -1276,6 +1401,61 @@ private fun TrackInfoCard(
             )
         ) {
             Text(text = "Go to Album", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+
+        Button(
+            onClick = onPlayNext,
+            modifier = Modifier.focusProperties { up = FocusRequester.Cancel },
+            shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            colors = ButtonDefaults.colors(
+                containerColor = Color.White.copy(alpha = 0.12f),
+                disabledContainerColor = Color.White.copy(alpha = 0.12f),
+                contentColor = color.copy(alpha = 0.85f),
+                disabledContentColor = color.copy(alpha = 0.3f),
+                focusedContainerColor = Color.White,
+                focusedContentColor = Color.Black
+            )
+        ) {
+            Text(text = "Play next", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Button(
+            onClick = onAddToQueue,
+            modifier = Modifier.focusProperties { up = FocusRequester.Cancel },
+            shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            colors = ButtonDefaults.colors(
+                containerColor = Color.White.copy(alpha = 0.12f),
+                disabledContainerColor = Color.White.copy(alpha = 0.12f),
+                contentColor = color.copy(alpha = 0.85f),
+                disabledContentColor = color.copy(alpha = 0.3f),
+                focusedContainerColor = Color.White,
+                focusedContentColor = Color.Black
+            )
+        ) {
+            Text(text = "Add to queue", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+
+        Button(
+            onClick = onRefreshLyrics,
+            modifier = Modifier.focusProperties { up = FocusRequester.Cancel },
+            shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+            colors = ButtonDefaults.colors(
+                containerColor = Color.White.copy(alpha = 0.12f),
+                disabledContainerColor = Color.White.copy(alpha = 0.12f),
+                contentColor = color.copy(alpha = 0.85f),
+                disabledContentColor = color.copy(alpha = 0.3f),
+                focusedContainerColor = Color.White,
+                focusedContentColor = Color.Black
+            )
+        ) {
+            Text(text = "Refresh lyrics", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+        }
         }
     }
 }
