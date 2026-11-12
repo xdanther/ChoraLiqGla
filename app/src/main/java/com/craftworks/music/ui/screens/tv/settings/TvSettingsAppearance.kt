@@ -216,8 +216,8 @@ fun TvS_AppearanceScreen() {
                 // Lyrics text size
                 val largeLyrics by AppearanceSettingsManager(context).largeLyricsText.collectAsState(true)
                 SettingsSwitchItem(
-                    title = "Larger lyrics text",
-                    icon = ImageVector.vectorResource(R.drawable.rounded_sort_24),
+                    title = stringResource(R.string.tv_lyrics_large_text),
+                    icon = ImageVector.vectorResource(R.drawable.lyrics_inactive),
                     checked = largeLyrics,
                     onCheckedChange = {
                         coroutineScope.launch {
@@ -229,8 +229,8 @@ fun TvS_AppearanceScreen() {
                 // Which lyric presentation the TV player uses
                 val appleLyrics by AppearanceSettingsManager(context).appleTvLyrics.collectAsState(false)
                 SettingsSwitchItem(
-                    title = "Apple-style lyrics",
-                    icon = ImageVector.vectorResource(R.drawable.rounded_sort_24),
+                    title = stringResource(R.string.tv_lyrics_apple_style),
+                    icon = ImageVector.vectorResource(R.drawable.lyrics_inactive),
                     checked = appleLyrics,
                     onCheckedChange = {
                         coroutineScope.launch {

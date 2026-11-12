@@ -1084,7 +1084,6 @@ private fun TvLyricsPane(
 
     // The same preferences the shared lyric view reads, so a switch cannot mean two
     // different things depending on which pane happens to be on screen.
-    val useBlur by settings.nowPlayingLyricsBlurFlow.collectAsStateWithLifecycle(true)
     val speed by settings.lyricsAnimationSpeedFlow.collectAsStateWithLifecycle(660)
     val alignment by settings.nowPlayingLyricsAlignment
         .collectAsStateWithLifecycle(NowPlayingAlignment.CENTER)
@@ -1133,22 +1132,6 @@ private fun TvLyricsPane(
     val size = if (largeText) 34.sp else 28.sp
 
     BoxWithConstraints(modifier.fillMaxSize()) {
-        if (useBlur) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(metadata?.artworkUri)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(24.dp))
-                    .graphicsLayer { alpha = 0.30f }
-                    .blur(46.dp)
-            )
-        }
-
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),

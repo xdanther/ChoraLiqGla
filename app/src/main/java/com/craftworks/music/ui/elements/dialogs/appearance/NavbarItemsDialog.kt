@@ -71,8 +71,8 @@ fun NavbarItemsDialog(setShowDialog: (Boolean) -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 state = lazyListState
             ) {
-                items(bottomNavigationItems, key = { it.title }) { navItem ->
-                    ReorderableItem(reorderableLazyColumnState, navItem.title) {
+                items(bottomNavigationItems, key = { it.screenRoute.toString() }) { navItem ->
+                    ReorderableItem(reorderableLazyColumnState, navItem.screenRoute.toString()) {
                         val interactionSource = remember { MutableInteractionSource() }
                         val index = bottomNavigationItems.indexOf(navItem)
 
@@ -82,7 +82,7 @@ fun NavbarItemsDialog(setShowDialog: (Boolean) -> Unit) {
                                 .height(48.dp)
                         ) {
                             Checkbox(
-                                enabled = navItem.title != "Home",
+                                enabled = navItem.screenRoute != Screen.Home,
                                 checked = bottomNavigationItems[index].enabled,
                                 onCheckedChange = {
                                     coroutineScope.launch {

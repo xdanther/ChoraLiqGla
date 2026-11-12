@@ -18,4 +18,9 @@
 
     // Misc
     <string name="label_separator">Separator</string>
+
+    <string name="tv_lyrics_apple_style">Apple-style lyrics</string>
+    <string name="tv_lyrics_apple_style_description">Big tinted lines over the blurred cover on the TV player</string>
+    <string name="tv_lyrics_large_text">Larger lyrics text</string>
+    <string name="tv_lyrics_large_text_description">Scale the lyrics up on the TV player</string>
 </resources>
