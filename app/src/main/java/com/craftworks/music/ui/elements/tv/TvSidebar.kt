@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -182,16 +183,7 @@ fun TvSidebarScaffold(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        renderEffect = BlurEffect(64f, 64f, TileMode.Clamp)
-                    }
-                    .drawWithContent { drawLayer(backdrop) }
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.18f))
+                    .background(Color.Black.copy(alpha = 0.14f))
             )
         }
 
@@ -215,18 +207,37 @@ fun TvSidebarScaffold(
             ),
             modifier = Modifier.align(Alignment.TopStart)
         ) {
-            TvSidebarPanel(
-                navItems = navItems,
-                backStackEntry = backStackEntry,
-                isPlayingVisible = isPlayingVisible,
-                firstItemFocusRequester = firstItemFocusRequester,
-                modifier = Modifier.padding(start = 20.dp, top = 20.dp)
-            ) { screen ->
-                if (!backStackEntry.isOnRoute(screen)) navController.navigate(screen) {
-                    launchSingleTop = true
-                    restoreState = true
+            Box(modifier = Modifier.padding(start = 20.dp, top = 20.dp)) {
+                // Only the patch of page the card covers is blurred: the recording is
+                // full-screen, so it is shifted back by the card's own inset and
+                // clipped to the card's outline.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            shape = RoundedCornerShape(26.dp)
+                            clip = true
+                            renderEffect = BlurEffect(56f, 56f, TileMode.Clamp)
+                        }
+                        .drawWithContent {
+                            translate(left = -20.dp.toPx(), top = -20.dp.toPx()) {
+                                drawLayer(backdrop)
+                            }
+                        }
+                )
+
+                TvSidebarPanel(
+                    navItems = navItems,
+                    backStackEntry = backStackEntry,
+                    isPlayingVisible = isPlayingVisible,
+                    firstItemFocusRequester = firstItemFocusRequester
+                ) { screen ->
+                    if (!backStackEntry.isOnRoute(screen)) navController.navigate(screen) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                    isSidebarOpen = false
                 }
-                isSidebarOpen = false
             }
         }
     }
@@ -265,7 +276,7 @@ private fun TvSidebarPanel(
             // over whatever artwork sits behind the panel.
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.16f), Color.Black.copy(alpha = 0.34f))
+                    listOf(Color.White.copy(alpha = 0.14f), Color.Black.copy(alpha = 0.26f))
                 )
             )
             .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(26.dp))
