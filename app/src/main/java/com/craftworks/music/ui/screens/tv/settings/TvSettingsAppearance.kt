@@ -226,6 +226,19 @@ fun TvS_AppearanceScreen() {
                     }
                 )
 
+                // Which lyric presentation the TV player uses
+                val appleLyrics by AppearanceSettingsManager(context).appleTvLyrics.collectAsState(false)
+                SettingsSwitchItem(
+                    title = "Apple-style lyrics",
+                    icon = ImageVector.vectorResource(R.drawable.rounded_sort_24),
+                    checked = appleLyrics,
+                    onCheckedChange = {
+                        coroutineScope.launch {
+                            AppearanceSettingsManager(context).setAppleTvLyrics(it)
+                        }
+                    }
+                )
+
                 // Lyrics blur
                 val nowPlayingLyricsBlur by AppearanceSettingsManager(context).nowPlayingLyricsBlurFlow.collectAsState(
                     true

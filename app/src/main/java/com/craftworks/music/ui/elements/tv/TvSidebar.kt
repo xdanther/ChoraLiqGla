@@ -105,28 +105,20 @@ fun TvSidebarScaffold(
     val context = LocalContext.current
     val backStackEntry by navController.currentBackStackEntryAsState()
 
-    val navItems = AppearanceSettingsManager(context).bottomNavItemsFlow.collectAsState(
-        initial = listOf(
-            BottomNavItem(
-                stringResource(R.string.nav_home), R.drawable.rounded_home_24, Screen.Home
-            ),
-            BottomNavItem(
-                stringResource(R.string.nav_albums), R.drawable.rounded_library_music_24, Screen.Albums
-            ),
-            BottomNavItem(
-                stringResource(R.string.nav_songs), R.drawable.round_music_note_24, Screen.Songs, false
-            ),
-            BottomNavItem(
-                stringResource(R.string.nav_artists), R.drawable.rounded_artist_24, Screen.Artists
-            ),
-            BottomNavItem(
-                stringResource(R.string.nav_radios), R.drawable.rounded_radio, Screen.Radios
-            ),
-            BottomNavItem(
-                stringResource(R.string.nav_playlists), R.drawable.placeholder, Screen.Playlists
-            ),
+    // Exactly what the navbar settings configure, in their order. The fallback mirrors
+    // the manager's own defaults so the first frame is never an empty menu.
+    val defaultItems = remember(context) {
+        listOf(
+            BottomNavItem(context.getString(R.string.nav_home), R.drawable.rounded_home_24, Screen.Home),
+            BottomNavItem(context.getString(R.string.nav_albums), R.drawable.rounded_library_music_24, Screen.Albums),
+            BottomNavItem(context.getString(R.string.nav_songs), R.drawable.round_music_note_24, Screen.Songs),
+            BottomNavItem(context.getString(R.string.nav_artists), R.drawable.rounded_artist_24, Screen.Artists),
+            BottomNavItem(context.getString(R.string.nav_radios), R.drawable.rounded_radio, Screen.Radios),
+            BottomNavItem(context.getString(R.string.nav_playlists), R.drawable.placeholder, Screen.Playlists),
         )
-    ).value
+    }
+    val navItems = AppearanceSettingsManager(context).bottomNavItemsFlow
+        .collectAsState(initial = defaultItems).value
 
     var isPlayingVisible by remember { mutableStateOf(mediaController?.currentMediaItem != null) }
     LaunchedEffect(mediaController?.mediaMetadata) {
@@ -345,32 +337,14 @@ private fun TvSidebarPanel(
             )
         }
 
-        TvSidebarItem(
-            label = stringResource(R.string.nav_search),
-            icon = Icons.Rounded.Search,
-            selected = backStackEntry.isOnRoute(Screen.Search),
-            modifier = Modifier.focusRequester(firstItemFocusRequester)
-        ) {
-            onNavigate(Screen.Search)
-        }
-
-        navItems.filter { it.enabled }.forEach { item ->
+        navItems.filter { it.enabled }.forEachIndexed { index, item ->
             TvSidebarItem(
                 label = item.title,
                 icon = ImageVector.vectorResource(item.icon),
-                selected = backStackEntry.isOnRoute(item.screenRoute)
+                selected = backStackEntry.isOnRoute(item.screenRoute),
+                modifier = if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
             ) {
                 onNavigate(item.screenRoute)
-            }
-        }
-
-        if (isPlayingVisible) {
-            TvSidebarItem(
-                label = stringResource(R.string.nav_playing),
-                icon = ImageVector.vectorResource(R.drawable.s_m_playback),
-                selected = backStackEntry.isOnRoute(Screen.NowPlayingLandscape)
-            ) {
-                onNavigate(Screen.NowPlayingLandscape)
             }
         }
 

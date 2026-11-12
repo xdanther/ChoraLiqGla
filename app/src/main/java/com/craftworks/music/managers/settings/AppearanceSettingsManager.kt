@@ -62,6 +62,8 @@ class AppearanceSettingsManager @Inject constructor(
         private val ALBUM_DETAILS_BUTTONS = stringPreferencesKey("album_details_buttons")
         private val ARTIST_DETAILS_BUTTONS = stringPreferencesKey("artist_details_buttons")
         private val PLAYLIST_DETAILS_BUTTONS = stringPreferencesKey("playlist_details_buttons")
+        private val LARGE_LYRICS_TEXT = booleanPreferencesKey("large_lyrics_text")
+        private val APPLE_TV_LYRICS = booleanPreferencesKey("apple_tv_lyrics")
     }
 
     val usernameFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -241,13 +243,31 @@ class AppearanceSettingsManager @Inject constructor(
 
     /** Bigger lyric type on the TV player, like the reference player. */
     val largeLyricsText: Flow<Boolean> = context.dataStore.data.map { preferences ->
-        preferences[booleanPreferencesKey("large_lyrics_text")] ?: true
+        preferences[LARGE_LYRICS_TEXT] ?: true
     }
 
     suspend fun setLargeLyricsText(large: Boolean) {
         withContext(NonCancellable) {
             context.dataStore.edit { preferences ->
-                preferences[booleanPreferencesKey("large_lyrics_text")] = large
+                preferences[LARGE_LYRICS_TEXT] = large
+            }
+        }
+    }
+
+    /**
+     * The TV player's own lyric pane. Off by default: the player keeps the shared
+     * [com.craftworks.music.ui.playing.LyricsView] unless this is switched on, so the
+     * blur, alignment, autoscroll, recenter, bounce and speed settings keep behaving
+     * exactly as before for anyone who leaves it alone.
+     */
+    val appleTvLyrics: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[APPLE_TV_LYRICS] ?: false
+    }
+
+    suspend fun setAppleTvLyrics(enabled: Boolean) {
+        withContext(NonCancellable) {
+            context.dataStore.edit { preferences ->
+                preferences[APPLE_TV_LYRICS] = enabled
             }
         }
     }

@@ -7,6 +7,9 @@ import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.snap
+import com.craftworks.music.ui.playing.NowPlayingAlignment
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
@@ -133,6 +136,7 @@ fun TvNowPlaying(
     val showAppleBar by settings.showApplePlayerBar.collectAsStateWithLifecycle(true)
     val showClassicBar by settings.showClassicPlayerBar.collectAsStateWithLifecycle(false)
     val largeLyrics by settings.largeLyricsText.collectAsStateWithLifecycle(true)
+    val appleLyrics by settings.appleTvLyrics.collectAsStateWithLifecycle(false)
     val oledProtectionMode by settings.oledProtectionMode.collectAsStateWithLifecycle(OLEDProtectionMode.OFF)
 
     var barVisible by remember { mutableStateOf(false) }
@@ -472,12 +476,32 @@ fun TvNowPlaying(
                                     .fillMaxHeight()
                                     .padding(vertical = 12.dp)
                             ) {
-                                TvLyricsPane(
-                                    tint = iconTextColor,
-                                    largeText = largeLyrics,
-                                    metadata = metadata,
-                                    mediaController = mediaController
-                                )
+                                if (appleLyrics) {
+                                    TvLyricsPane(
+                                        tint = iconTextColor,
+                                        largeText = largeLyrics,
+                                        metadata = metadata,
+                                        mediaController = mediaController,
+                                        settings = settings
+                                    )
+                                } else {
+                                    // The shared view: every lyric setting behaves here too
+                                    CompositionLocalProvider(
+                                        LocalDensity provides Density(
+                                            density = LocalDensity.current.density,
+                                            fontScale = LocalDensity.current.fontScale *
+                                                    if (largeLyrics) 1.35f else 1f
+                                        )
+                                    ) {
+                                        LyricsView(
+                                            iconTextColor,
+                                            true,
+                                            mediaController,
+                                            PaddingValues(horizontal = 12.dp),
+                                            onRefreshLyrics
+                                        )
+                                    }
+                                }
                             }
                         }
                     } else {
@@ -1053,9 +1077,20 @@ private fun TvLyricsPane(
     largeText: Boolean,
     metadata: MediaMetadata?,
     mediaController: MediaController?,
+    settings: AppearanceSettingsManager,
     modifier: Modifier = Modifier
 ) {
     val lyrics = LyricsState.lyrics.collectAsStateWithLifecycle().value ?: return
+
+    // The same preferences the shared lyric view reads, so a switch cannot mean two
+    // different things depending on which pane happens to be on screen.
+    val useBlur by settings.nowPlayingLyricsBlurFlow.collectAsStateWithLifecycle(true)
+    val speed by settings.lyricsAnimationSpeedFlow.collectAsStateWithLifecycle(660)
+    val alignment by settings.nowPlayingLyricsAlignment
+        .collectAsStateWithLifecycle(NowPlayingAlignment.CENTER)
+    val autoScroll by settings.lyricsAutoScroll.collectAsStateWithLifecycle(true)
+    val recenter by settings.lyricsRecenterAfterScroll.collectAsStateWithLifecycle(true)
+    val bounce by settings.lyricsBounce.collectAsStateWithLifecycle(true)
 
     val lines = remember(lyrics) {
         lyrics.lines
@@ -1080,27 +1115,39 @@ private fun TvLyricsPane(
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(activeIndex) {
-        runCatching { listState.animateScrollToItem(activeIndex) }
+    LaunchedEffect(activeIndex, autoScroll, recenter) {
+        if (!autoScroll) return@LaunchedEffect
+        val onScreen = listState.layoutInfo.visibleItemsInfo.any { it.index == activeIndex }
+        if (recenter || !onScreen) {
+            runCatching { listState.animateScrollToItem(activeIndex) }
+        }
     }
 
+    val textAlign = when (alignment) {
+        NowPlayingAlignment.LEFT -> TextAlign.Start
+        NowPlayingAlignment.CENTER -> TextAlign.Center
+        NowPlayingAlignment.RIGHT -> TextAlign.End
+    }
+    val emphasisSpec: AnimationSpec<Float> =
+        if (bounce) tween((2400 - speed).coerceIn(160, 700)) else snap()
     val size = if (largeText) 34.sp else 28.sp
 
     BoxWithConstraints(modifier.fillMaxSize()) {
-        // the lyrics keep the soft cover wash behind them
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(metadata?.artworkUri)
-                .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(24.dp))
-                .graphicsLayer { alpha = 0.30f }
-                .blur(46.dp)
-        )
+        if (useBlur) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(metadata?.artworkUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(24.dp))
+                    .graphicsLayer { alpha = 0.30f }
+                    .blur(46.dp)
+            )
+        }
 
         LazyColumn(
             state = listState,
@@ -1109,19 +1156,24 @@ private fun TvLyricsPane(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             itemsIndexed(lines) { index, line ->
-                val active = index == activeIndex
+                val emphasis by animateFloatAsState(
+                    targetValue = if (index == activeIndex) 1f else 0f,
+                    animationSpec = emphasisSpec,
+                    label = "line emphasis"
+                )
+
                 Text(
                     text = line.second,
-                    fontSize = if (active) size else size * 0.86f,
-                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = size * (0.86f + 0.14f * emphasis),
+                    fontWeight = if (index == activeIndex) FontWeight.Bold else FontWeight.Medium,
                     fontFamily = FontFamily.SansSerif,
                     lineHeight = size * 1.16f,
-                    color = tint.copy(alpha = if (active) 1f else 0.40f),
+                    textAlign = textAlign,
+                    color = tint.copy(alpha = 0.40f + 0.60f * emphasis),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         }
-
     }
 }
 
@@ -1133,10 +1185,11 @@ private fun TrackInfoCard(
     modifier: Modifier = Modifier
 ) {
     val ctaFocus = remember { FocusRequester() }
+    val albumId = metadata?.extras?.getString("albumId").orEmpty()
 
     // The card is opened from the bar, so it claims focus to make the pill reachable
-    LaunchedEffect(Unit) {
-        runCatching { ctaFocus.requestFocus() }
+    LaunchedEffect(albumId) {
+        if (albumId.isNotBlank()) runCatching { ctaFocus.requestFocus() }
     }
 
     val durationMs = metadata?.durationMs ?: 0L
@@ -1222,6 +1275,7 @@ private fun TrackInfoCard(
                 )
         }
 
+        if (albumId.isNotBlank())
         Button(
             onClick = onGoToAlbum,
             modifier = Modifier
