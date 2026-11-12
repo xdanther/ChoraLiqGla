@@ -1759,8 +1759,17 @@ private fun PaletteWash(palette: List<Color>) {
         label = "wash time"
     )
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val shader = remember { android.graphics.RuntimeShader(WASH_SHADER) }
+    // The runtime validates the program in its constructor, so a shader the device
+    // rejects degrades to the static gradient instead of taking the player down.
+    val shader = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching { android.graphics.RuntimeShader(WASH_SHADER) }.getOrNull()
+        } else {
+            null
+        }
+    }
+
+    if (shader != null) {
         val paint = remember { android.graphics.Paint().apply { isAntiAlias = false } }
 
         Canvas(Modifier.fillMaxSize()) {
