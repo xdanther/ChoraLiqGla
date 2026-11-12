@@ -1,7 +1,15 @@
 package com.craftworks.music.ui.elements.tv
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,7 +45,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -69,15 +80,16 @@ import kotlinx.coroutines.delay
 private val SidebarWidth = 224.dp
 
 /** Scrim drawn over the screen while the sidebar is open. */
-private val ScrimColor = Color.Black.copy(alpha = 0.30f)
+private val ScrimColor = Color.Black.copy(alpha = 0.32f)
 
 /** The red tile Apple Music uses for its channel row, reused for Chora. */
 private val ChannelTileColor = Color(0xFFFA233B)
 
 /**
- * TV chrome modelled on Apple Music on Apple TV: a floating, rounded card that
+ * TV chrome modelled on Apple Music on Apple TV: a floating, frosted card that
  * carries the account row, the destinations as pill rows and a channel tile at
- * the bottom. It opens from the remote's options/menu button and closes with back.
+ * the bottom. It slides in from the remote's options/menu button, and back on a
+ * root screen opens it before it closes the app.
  *
  * The panel is an overlay, so screens keep the full canvas while it is closed. It is
  * not offered on the player route, which keeps the whole screen.
@@ -140,6 +152,13 @@ fun TvSidebarScaffold(
                         true
                     }
 
+                    // Back on a root screen summons the panel before it leaves the app
+                    (event.key == Key.Back || event.key == Key.Escape) &&
+                            backStackEntry.isOnRoute(Screen.Home) -> {
+                        isSidebarOpen = true
+                        true
+                    }
+
                     else -> false
                 }
             }
@@ -153,21 +172,44 @@ fun TvSidebarScaffold(
             content()
         }
 
-        if (isSidebarOpen && !isNowPlaying) {
+        AnimatedVisibility(
+            visible = isSidebarOpen && !isNowPlaying,
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(180))
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(ScrimColor)
             )
+        }
 
+        AnimatedVisibility(
+            visible = isSidebarOpen && !isNowPlaying,
+            enter = fadeIn(tween(200)) + slideInHorizontally(
+                animationSpec = tween(280),
+                initialOffsetX = { -it / 4 }
+            ) + scaleIn(
+                initialScale = 0.94f,
+                transformOrigin = TransformOrigin(0f, 0f),
+                animationSpec = tween(280)
+            ),
+            exit = fadeOut(tween(140)) + slideOutHorizontally(
+                animationSpec = tween(200),
+                targetOffsetX = { -it / 4 }
+            ) + scaleOut(
+                targetScale = 0.94f,
+                transformOrigin = TransformOrigin(0f, 0f),
+                animationSpec = tween(200)
+            ),
+            modifier = Modifier.align(Alignment.TopStart)
+        ) {
             TvSidebarPanel(
                 navItems = navItems,
                 backStackEntry = backStackEntry,
                 isPlayingVisible = isPlayingVisible,
                 firstItemFocusRequester = firstItemFocusRequester,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 20.dp, top = 20.dp)
+                modifier = Modifier.padding(start = 20.dp, top = 20.dp)
             ) { screen ->
                 if (!backStackEntry.isOnRoute(screen)) navController.navigate(screen) {
                     launchSingleTop = true
@@ -208,13 +250,18 @@ private fun TvSidebarPanel(
             .width(SidebarWidth)
             .wrapContentHeight()
             .clip(RoundedCornerShape(26.dp))
-            .background(Color.Black.copy(alpha = 0.62f))
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(26.dp))
+            // A frost, not a page blur: layered translucency keeps the labels readable
+            // over whatever artwork sits behind the panel.
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color.Black.copy(alpha = 0.82f), Color.Black.copy(alpha = 0.64f))
+                )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(26.dp))
             .focusGroup()
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        // Account row: avatar, name, time — the first thing the reference panel shows
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -225,7 +272,7 @@ private fun TvSidebarPanel(
                 modifier = Modifier
                     .size(34.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.14f)),
+                    .background(Color.White.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -253,7 +300,7 @@ private fun TvSidebarPanel(
             Text(
                 text = clock,
                 fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.45f),
+                color = Color.White.copy(alpha = 0.50f),
                 maxLines = 1
             )
         }
@@ -293,7 +340,7 @@ private fun TvSidebarPanel(
             text = "More",
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = Color.White.copy(alpha = 0.45f),
+            color = Color.White.copy(alpha = 0.50f),
             modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
         )
 
@@ -319,26 +366,31 @@ private fun TvSidebarItem(
     val containerColor by animateColorAsState(
         targetValue = when {
             focused -> Color.White
-            selected -> Color.White.copy(alpha = 0.12f)
+            selected -> Color.White.copy(alpha = 0.14f)
             else -> Color.Transparent
         },
-        animationSpec = tween(durationMillis = 140),
+        animationSpec = tween(durationMillis = 150),
         label = "sidebar container"
     )
-    val contentColor by animateColorAsState(
-        targetValue = when {
-            focused -> Color.Black
-            selected -> Color.White
-            else -> Color.White.copy(alpha = 0.82f)
-        },
-        animationSpec = tween(durationMillis = 140),
-        label = "sidebar content"
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.06f else 1f,
+        animationSpec = tween(durationMillis = 170),
+        label = "sidebar scale"
     )
+    val contentColor = when {
+        focused -> Color.Black
+        selected -> Color.White
+        else -> Color.White.copy(alpha = 0.85f)
+    }
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(42.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(CircleShape)
             .background(containerColor)
             .onFocusChanged { focused = it.isFocused }
@@ -376,11 +428,11 @@ private fun TvSidebarChannelItem(
 
     val containerColor by animateColorAsState(
         targetValue = when {
-            focused -> Color.White.copy(alpha = 0.12f)
-            selected -> Color.White.copy(alpha = 0.06f)
+            focused -> Color.White.copy(alpha = 0.16f)
+            selected -> Color.White.copy(alpha = 0.08f)
             else -> Color.Transparent
         },
-        animationSpec = tween(durationMillis = 140),
+        animationSpec = tween(durationMillis = 150),
         label = "channel container"
     )
 
@@ -388,7 +440,7 @@ private fun TvSidebarChannelItem(
         modifier = modifier
             .fillMaxWidth()
             .height(46.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(containerColor)
             .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
@@ -413,7 +465,7 @@ private fun TvSidebarChannelItem(
 
         Text(
             text = label,
-            color = Color.White.copy(alpha = 0.9f),
+            color = if (focused) Color.White else Color.White.copy(alpha = 0.9f),
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
