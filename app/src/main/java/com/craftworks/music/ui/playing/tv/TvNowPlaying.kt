@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -134,6 +135,7 @@ fun TvNowPlaying(
     val barFocus = remember { FocusRequester() }
     val classicBarFocus = remember { FocusRequester() }
     var barFocusTicket by remember { mutableIntStateOf(0) }
+    var barOwnsFocus by remember { mutableStateOf(false) }
 
     // The bar is a visiting guest: it fades away again so the artwork stays the main thing.
     LaunchedEffect(barVisible, lastInteraction, infoOpen) {
@@ -188,6 +190,11 @@ fun TvNowPlaying(
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type != KeyEventType.KeyDown) return@onKeyEvent false
                 val keyCode = keyEvent.nativeKeyEvent.keyCode
+
+                // While a bar button holds focus the bar handles its own keys and the
+                // D-Pad is left alone, otherwise left/right seek instead of moving
+                // between Info and Lyrics.
+                if (barVisible && barOwnsFocus) return@onKeyEvent false
 
                 when {
                     keyCode == KeyEvent.KEYCODE_BACK && infoOpen -> {
@@ -567,6 +574,12 @@ fun TvNowPlaying(
                 infoOpen = infoOpen,
                 infoFocus = barFocus,
                 pageFocus = pageFocus,
+                onBarFocusChanged = { barOwnsFocus = it },
+                onDismiss = {
+                    barVisible = false
+                    barOwnsFocus = false
+                    pageFocus.requestFocusSafely()
+                },
                 onToggleLyrics = {
                     lyricsOpen = !lyricsOpen
                     lastInteraction = System.nanoTime()
@@ -696,6 +709,8 @@ private fun ApplePlayerBar(
     infoOpen: Boolean,
     infoFocus: FocusRequester,
     pageFocus: FocusRequester,
+    onBarFocusChanged: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
     onToggleLyrics: () -> Unit,
     onToggleInfo: () -> Unit,
     onInteraction: () -> Unit
@@ -703,8 +718,18 @@ private fun ApplePlayerBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .onFocusChanged { onBarFocusChanged(it.hasFocus) }
             .onKeyEvent { keyEvent ->
-                if (keyEvent.type == KeyEventType.KeyDown) onInteraction()
+                if (keyEvent.type == KeyEventType.KeyDown) {
+                    onInteraction()
+                    // UP puts the bar away instead of re-selecting its buttons forever
+                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                        keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK
+                    ) {
+                        onDismiss()
+                        return@onKeyEvent true
+                    }
+                }
                 false
             },
         verticalArrangement = Arrangement.spacedBy(10.dp)

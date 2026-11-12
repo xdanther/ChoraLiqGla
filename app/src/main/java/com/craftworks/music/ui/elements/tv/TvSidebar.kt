@@ -41,14 +41,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -78,12 +83,6 @@ import kotlinx.coroutines.delay
 
 /** Width of the floating sidebar card, sized like the reference panel on a 960dp canvas. */
 private val SidebarWidth = 224.dp
-
-/** Scrim drawn over the screen while the sidebar is open. */
-private val ScrimColor = Color.Black.copy(alpha = 0.32f)
-
-/** The red tile Apple Music uses for its channel row, reused for Chora. */
-private val ChannelTileColor = Color(0xFFFA233B)
 
 /**
  * TV chrome modelled on Apple Music on Apple TV: a floating, frosted card that
@@ -132,6 +131,7 @@ fun TvSidebarScaffold(
     }
 
     val isNowPlaying = backStackEntry.isOnRoute(Screen.NowPlayingLandscape)
+    val backdrop = rememberGraphicsLayer()
     var isSidebarOpen by rememberSaveable { mutableStateOf(false) }
     val firstItemFocusRequester = remember { FocusRequester() }
 
@@ -163,24 +163,35 @@ fun TvSidebarScaffold(
                 }
             }
     ) {
+        // The page is recorded once per frame so the panel can sit on a blurred copy
+        // of it; that is what makes the glass read as glass rather than a dark slab.
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .focusRestorer()
                 .focusGroup()
+                .drawWithContent {
+                    backdrop.record { this@drawWithContent.drawContent() }
+                    drawLayer(backdrop)
+                }
         ) {
             content()
         }
 
-        AnimatedVisibility(
-            visible = isSidebarOpen && !isNowPlaying,
-            enter = fadeIn(tween(180)),
-            exit = fadeOut(tween(180))
-        ) {
+        if (isSidebarOpen && !isNowPlaying) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(ScrimColor)
+                    .graphicsLayer {
+                        renderEffect = BlurEffect(64f, 64f, TileMode.Clamp)
+                    }
+                    .drawWithContent { drawLayer(backdrop) }
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f))
             )
         }
 
@@ -254,10 +265,10 @@ private fun TvSidebarPanel(
             // over whatever artwork sits behind the panel.
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.Black.copy(alpha = 0.82f), Color.Black.copy(alpha = 0.64f))
+                    listOf(Color.White.copy(alpha = 0.16f), Color.Black.copy(alpha = 0.34f))
                 )
             )
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(26.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(26.dp))
             .focusGroup()
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -344,8 +355,9 @@ private fun TvSidebarPanel(
             modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
         )
 
-        TvSidebarChannelItem(
+        TvSidebarItem(
             label = stringResource(R.string.home_settings),
+            icon = ImageVector.vectorResource(R.drawable.rounded_settings_24),
             selected = backStackEntry.isOnRoute(Screen.Settings)
         ) {
             onNavigate(Screen.Settings)
@@ -366,7 +378,7 @@ private fun TvSidebarItem(
     val containerColor by animateColorAsState(
         targetValue = when {
             focused -> Color.White
-            selected -> Color.White.copy(alpha = 0.14f)
+            selected -> Color.White
             else -> Color.Transparent
         },
         animationSpec = tween(durationMillis = 150),
@@ -377,11 +389,7 @@ private fun TvSidebarItem(
         animationSpec = tween(durationMillis = 170),
         label = "sidebar scale"
     )
-    val contentColor = when {
-        focused -> Color.Black
-        selected -> Color.White
-        else -> Color.White.copy(alpha = 0.85f)
-    }
+    val contentColor = if (focused || selected) Color.Black else Color.White.copy(alpha = 0.88f)
 
     Row(
         modifier = modifier
@@ -410,63 +418,6 @@ private fun TvSidebarItem(
             text = label,
             color = contentColor,
             fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun TvSidebarChannelItem(
-    label: String,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    var focused by remember { mutableStateOf(false) }
-
-    val containerColor by animateColorAsState(
-        targetValue = when {
-            focused -> Color.White.copy(alpha = 0.16f)
-            selected -> Color.White.copy(alpha = 0.08f)
-            else -> Color.Transparent
-        },
-        animationSpec = tween(durationMillis = 150),
-        label = "channel container"
-    )
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(46.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(containerColor)
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(ChannelTileColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = ImageVector.vectorResource(R.drawable.round_music_note_24),
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-
-        Text(
-            text = label,
-            color = if (focused) Color.White else Color.White.copy(alpha = 0.9f),
-            fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
