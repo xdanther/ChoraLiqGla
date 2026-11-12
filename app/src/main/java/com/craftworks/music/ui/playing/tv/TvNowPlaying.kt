@@ -36,6 +36,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -151,9 +154,19 @@ fun TvNowPlaying(
 
     var barVisible by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
+    var queueOpen by remember { mutableStateOf(false) }
+    var moreOpen by remember { mutableStateOf(false) }
+
+    val sheetAlbumId = metadata?.extras?.getString("albumId").orEmpty()
     var lyricsOpen by remember { mutableStateOf(false) }
     var sleepTimerOpen by remember { mutableStateOf(false) }
     var lastInteraction by remember { mutableLongStateOf(0L) }
+
+    // Shared by the bar's lyrics button and the More sheet's row
+    val toggleLyrics = {
+        lyricsOpen = !lyricsOpen
+        lastInteraction = System.nanoTime()
+    }
 
     val lyrics by LyricsState.lyrics.collectAsStateWithLifecycle()
 
@@ -165,9 +178,9 @@ fun TvNowPlaying(
     var barOwnsFocus by remember { mutableStateOf(false) }
 
     // The bar is a visiting guest: it fades away again so the artwork stays the main thing.
-    LaunchedEffect(barVisible, lastInteraction, infoOpen) {
+    LaunchedEffect(barVisible, lastInteraction, infoOpen, queueOpen, moreOpen) {
         if (!barVisible) return@LaunchedEffect
-        if (infoOpen) return@LaunchedEffect
+        if (infoOpen || queueOpen || moreOpen) return@LaunchedEffect
         delay(BAR_AUTO_HIDE_MILLIS)
         barVisible = false
     }
@@ -604,6 +617,23 @@ fun TvNowPlaying(
             )
         }
 
+        if (queueOpen)
+            TvQueueSheet(
+                mediaController = mediaController,
+                onDismiss = { queueOpen = false }
+            )
+
+        if (moreOpen)
+            TvMoreSheet(
+                canShowLyrics = canShowLyrics,
+                lyricsOpen = lyricsOpen,
+                albumId = sheetAlbumId,
+                onGoToAlbum = { moreOpen = false; onGoToAlbum() },
+                onSleepTimer = { moreOpen = false; sleepTimerOpen = true },
+                onToggleLyrics = { moreOpen = false; toggleLyrics() },
+                onDismiss = { moreOpen = false }
+            )
+
         if (sleepTimerOpen)
             TvSleepTimerSheet(
                 onDismiss = { sleepTimerOpen = false },
@@ -654,6 +684,8 @@ fun TvNowPlaying(
                     infoOpen = !infoOpen
                     lastInteraction = System.nanoTime()
                 },
+                onOpenQueue = { queueOpen = true },
+                onOpenMore = { moreOpen = true },
                 onInteraction = { lastInteraction = System.nanoTime() }
             )
         }
@@ -779,6 +811,8 @@ private fun ApplePlayerBar(
     onDismiss: () -> Unit,
     onToggleLyrics: () -> Unit,
     onToggleInfo: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onOpenMore: () -> Unit,
     onInteraction: () -> Unit
 ) {
     Column(
@@ -829,6 +863,32 @@ private fun ApplePlayerBar(
             }
 
             Spacer(Modifier.weight(1f))
+
+            BarCircleButton(
+                icon = R.drawable.rounded_queue_music_24,
+                contentDescription = "Queue",
+                active = false,
+                modifier = Modifier
+                    .padding(end = 10.dp)
+                    .focusProperties {
+                        down = pageFocus
+                        up = FocusRequester.Cancel
+                    },
+                onClick = onOpenQueue
+            )
+
+            BarCircleButton(
+                icon = R.drawable.rounded_more_horiz_24,
+                contentDescription = "More",
+                active = false,
+                modifier = Modifier
+                    .padding(end = 10.dp)
+                    .focusProperties {
+                        down = pageFocus
+                        up = FocusRequester.Cancel
+                    },
+                onClick = onOpenMore
+            )
 
             if (canShowLyrics) {
                 BarCircleButton(
@@ -1169,6 +1229,163 @@ private fun TvLyricsPane(
                 )
             }
         }
+    }
+}
+
+/** Apple's queue: everything after the current song, with the current row marked. */
+@Composable
+private fun TvQueueSheet(
+    mediaController: MediaController?,
+    onDismiss: () -> Unit
+) {
+    val count = mediaController?.mediaItemCount ?: 0
+    val current = mediaController?.currentMediaItemIndex ?: 0
+    val currentFocus = remember { FocusRequester() }
+
+    LaunchedEffect(count) { runCatching { currentFocus.requestFocus() } }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .width(480.dp)
+                .heightIn(max = 396.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF1C1C1E))
+                .padding(vertical = 16.dp)
+        ) {
+            Text(
+                text = "Up Next",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 10.dp, bottom = 4.dp)
+            ) {
+                for (index in 0 until count) {
+                    val item = mediaController?.getMediaItemAt(index) ?: continue
+                    val isCurrent = index == current
+
+                    Button(
+                        onClick = {
+                            mediaController.seekToDefaultPosition(index)
+                            mediaController.play()
+                            onDismiss()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 2.dp)
+                            .then(if (isCurrent) Modifier.focusRequester(currentFocus) else Modifier),
+                        shape = ButtonDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                        colors = ButtonDefaults.colors(
+                            containerColor = Color.White.copy(alpha = if (isCurrent) 0.16f else 0.04f),
+                            focusedContainerColor = Color.White,
+                            contentColor = Color.White,
+                            focusedContentColor = Color.Black
+                        )
+                    ) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(
+                                text = item.mediaMetadata.title?.toString().orEmpty(),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = item.mediaMetadata.artist?.toString().orEmpty(),
+                                fontSize = 13.sp,
+                                color = androidx.compose.material3.LocalContentColor.current.copy(alpha = 0.66f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The ••• sheet: the actions the bar itself no longer carries. */
+@Composable
+private fun TvMoreSheet(
+    canShowLyrics: Boolean,
+    lyricsOpen: Boolean,
+    albumId: String,
+    onGoToAlbum: () -> Unit,
+    onSleepTimer: () -> Unit,
+    onToggleLyrics: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val first = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .width(320.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF1C1C1E))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (albumId.isNotBlank()) {
+                MoreSheetRow(
+                    label = "Go to Album",
+                    modifier = Modifier.focusRequester(first),
+                    onClick = onGoToAlbum
+                )
+            }
+
+            if (canShowLyrics) {
+                MoreSheetRow(
+                    label = if (lyricsOpen) "Hide Lyrics" else "Lyrics",
+                    modifier = if (albumId.isBlank()) Modifier.focusRequester(first) else Modifier,
+                    onClick = onToggleLyrics
+                )
+            }
+
+            MoreSheetRow(
+                label = "Sleep Timer",
+                modifier = if (albumId.isBlank() && !canShowLyrics) Modifier.focusRequester(first) else Modifier,
+                onClick = onSleepTimer
+            )
+        }
+    }
+}
+
+@Composable
+private fun MoreSheetRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = ButtonDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        colors = ButtonDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.White,
+            contentColor = Color.White,
+            focusedContentColor = Color.Black
+        )
+    ) {
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
