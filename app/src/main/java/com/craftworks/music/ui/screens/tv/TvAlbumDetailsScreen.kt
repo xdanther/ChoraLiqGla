@@ -196,8 +196,8 @@ fun TvAlbumDetails(
                     )
                 )
                 .size(1080)
-                .memoryCacheKey(selectedAlbumId)
-                .placeholderMemoryCacheKey(selectedAlbumId)
+                .memoryCacheKey("$selectedAlbumId@1080")
+                .placeholderMemoryCacheKey("$selectedAlbumId@1080")
                 .crossfade(true)
                 .build()
         }
@@ -214,7 +214,7 @@ fun TvAlbumDetails(
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             // 398dp in the reference, and never wider than the left column allows
-            val coverSize = minOf(maxHeight * 0.74f, maxWidth * 0.42f)
+            val coverSize = minOf(maxHeight * 0.66f, maxWidth * 0.38f)
 
             // The artwork, blown up and blurred, is the page's only background
             AsyncImage(
@@ -246,7 +246,7 @@ fun TvAlbumDetails(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 44.dp, end = 30.dp, top = 40.dp, bottom = 22.dp),
+                    .padding(start = 34.dp, end = 30.dp, top = 40.dp, bottom = 22.dp),
                 horizontalArrangement = Arrangement.spacedBy(36.dp)
             ) {
                 AsyncImage(
@@ -609,7 +609,7 @@ private fun MoreDots() {
                 Modifier
                     .size(4.dp)
                     .clip(CircleShape)
-                    .background(LocalContentColor.current.copy(alpha = 0.7f))
+                    .background(Color.White.copy(alpha = 0.9f))
             )
         }
     }
@@ -629,8 +629,6 @@ private fun AlbumOptionsDialog(
     onDismiss: () -> Unit
 ) {
     val firstItem = remember { FocusRequester() }
-    val surface = MaterialTheme.colorScheme.surface
-
     LaunchedEffect(Unit) {
         runCatching { firstItem.requestFocus() }
     }
@@ -642,7 +640,8 @@ private fun AlbumOptionsDialog(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(surface)
+                // The art stays visible behind the sheet, as on tvOS
+                .background(Color.Black.copy(alpha = 0.55f))
                 .padding(horizontal = 56.dp, vertical = 48.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.Top

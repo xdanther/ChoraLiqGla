@@ -7,6 +7,8 @@ import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -17,6 +19,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
@@ -162,6 +165,32 @@ fun TvNowPlaying(
         targetValue = iconColor,
         animationSpec = tween(1000, 0, FastOutSlowInEasing),
         label = "Animated text color"
+    )
+
+    // A slow, endless drift over the blurred cover, the way the iOS player breathes
+    val drift = rememberInfiniteTransition(label = "Backdrop drift")
+    val driftScale by drift.animateFloat(
+        initialValue = 1.18f,
+        targetValue = 1.34f,
+        animationSpec = infiniteRepeatable(tween(26_000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "drift scale"
+    )
+    val driftX by drift.animateFloat(
+        initialValue = -22f,
+        targetValue = 22f,
+        animationSpec = infiniteRepeatable(tween(34_000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "drift x"
+    )
+    val driftY by drift.animateFloat(
+        initialValue = 14f,
+        targetValue = -14f,
+        animationSpec = infiniteRepeatable(tween(30_000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "drift y"
+    )
+    val contentLift by animateFloatAsState(
+        targetValue = if (barVisible) -46f else 0f,
+        animationSpec = tween(240),
+        label = "content lift"
     )
 
     val isRadio = metadata?.mediaType == MediaMetadata.MEDIA_TYPE_RADIO_STATION
@@ -343,9 +372,9 @@ fun TvNowPlaying(
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val sideBySideLyrics = lyricsOpen && canShowLyrics
                     val coverSize = if (sideBySideLyrics) {
-                        minOf(maxWidth * 0.19f, maxHeight * 0.30f)
+                        minOf(maxWidth * 0.26f, maxHeight * 0.38f)
                     } else {
-                        minOf(maxWidth * 0.34f, maxHeight * 0.42f)
+                        minOf(maxWidth * 0.40f, maxHeight * 0.50f)
                     }
 
                     // Artwork, blurred out to a colour wash behind everything
@@ -362,8 +391,10 @@ fun TvNowPlaying(
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
-                                scaleX = 1.25f
-                                scaleY = 1.25f
+                                scaleX = driftScale
+                                scaleY = driftScale
+                                translationX = driftX
+                                translationY = driftY
                                 alpha = 0.7f
                             }
                             .blur(70.dp)
@@ -386,6 +417,7 @@ fun TvNowPlaying(
                         Row(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .graphicsLayer { translationY = contentLift.dp.toPx() }
                                 .padding(horizontal = 56.dp)
                                 .padding(top = 24.dp, bottom = 24.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -436,8 +468,6 @@ fun TvNowPlaying(
                                 modifier = Modifier
                                     .weight(0.58f)
                                     .fillMaxHeight()
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .background(Color.Black.copy(alpha = 0.28f))
                                     .padding(vertical = 12.dp)
                             ) {
                                 LyricsView(
@@ -453,6 +483,7 @@ fun TvNowPlaying(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .graphicsLayer { translationY = contentLift.dp.toPx() }
                                 .padding(horizontal = 40.dp)
                                 .padding(top = 28.dp, bottom = 24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -1010,52 +1041,88 @@ private fun TrackInfoCard(
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    val durationMs = metadata?.durationMs ?: 0L
+    val minutes = durationMs / 60_000L
+    val seconds = (durationMs % 60_000L) / 1000L
     val format = metadata?.extras?.getString("format")?.uppercase()
     val bitrate = metadata?.extras?.getLong("bitrate")?.takeIf { it > 0 }
-    val year = metadata?.recordingYear ?: 0
-    val provider = MediaProviderManager.getProvider(metadata?.providerId ?: "")
-        ?.providerName
-        ?.let { stringResource(it) }
+    val lossless = format?.contains("FLAC") == true ||
+            format?.contains("ALAC") == true ||
+            (bitrate ?: 0) >= 700
 
     Column(
         modifier = modifier
-            .widthIn(max = 380.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.Black.copy(alpha = 0.66f))
-            .padding(horizontal = 22.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .widthIn(max = 420.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.Black.copy(alpha = 0.42f))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = metadata?.albumTitle?.toString() ?: "Unknown album",
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Text(
-            text = metadata?.artist?.toString().orEmpty(),
-            fontSize = 14.sp,
-            color = color.copy(alpha = 0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        if (year > 0)
-            Text(
-                text = year.toString(),
-                fontSize = 14.sp,
-                color = color.copy(alpha = 0.55f)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(metadata?.artworkUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                fallback = painterResource(R.drawable.placeholder),
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(8.dp))
             )
 
-        val formatLine = listOfNotNull(format, bitrate?.let { "$it kbps" }, provider)
-        if (formatLine.isNotEmpty())
-            Text(
-                text = formatLine.joinToString(" · "),
-                fontSize = 13.sp,
-                color = color.copy(alpha = 0.5f),
-                maxLines = 1
-            )
+            Spacer(Modifier.width(14.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = metadata?.title?.toString().orEmpty(),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = color,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = listOfNotNull(
+                        metadata?.artist?.toString()?.takeIf { it.isNotBlank() },
+                        metadata?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
+                    ).joinToString(" – "),
+                    fontSize = 14.sp,
+                    color = color.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (durationMs > 0)
+                Text(
+                    text = "$minutes min, $seconds sec",
+                    fontSize = 13.sp,
+                    color = color.copy(alpha = 0.7f)
+                )
+
+            if (lossless)
+                Text(
+                    text = "Lossless",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                )
+        }
     }
 }
+
