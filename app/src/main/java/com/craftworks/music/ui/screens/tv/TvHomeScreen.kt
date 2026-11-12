@@ -308,8 +308,8 @@ private fun CarouselItem(
                 LibraryType.ALBUM,
                 32
             ))
-            .diskCacheKey(album.mediaMetadata.id ?: album.mediaId)
-            .memoryCacheKey(album.mediaMetadata.id ?: album.mediaId)
+            .diskCacheKey("${album.mediaMetadata.id ?: album.mediaId}@32")
+            .memoryCacheKey("${album.mediaMetadata.id ?: album.mediaId}@32")
             .diskCachePolicy(CachePolicy.READ_ONLY)
             .memoryCachePolicy(CachePolicy.READ_ONLY)
             .allowHardware(false)
@@ -337,9 +337,11 @@ private fun CarouselItem(
                 .data(album.mediaMetadata.getProvider()?.getImageUrl(
                     album.mediaMetadata.extras?.getString("imageId")?:"",
                     LibraryType.ALBUM,
-                    1024
+                    1080
                 ))
-                .diskCacheKey(album.mediaMetadata.id ?: album.mediaId)
+                .size(1080)
+                .memoryCacheKey("${album.mediaMetadata.id ?: album.mediaId}@1080")
+                .diskCacheKey("${album.mediaMetadata.id ?: album.mediaId}@1080")
                 .diskCachePolicy(CachePolicy.DISABLED)
                 .crossfade(true)
                 .build(),

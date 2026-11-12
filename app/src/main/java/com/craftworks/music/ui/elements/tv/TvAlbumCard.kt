@@ -24,6 +24,8 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.craftworks.music.R
+import com.craftworks.music.data.model.LibraryType
+import com.craftworks.music.data.model.getProvider
 import com.craftworks.music.data.model.id
 
 /**
@@ -40,7 +42,15 @@ fun TvAlbumCard(
 ) {
     val albumTitle = album.mediaMetadata.title?.toString() ?: ""
     val artistName = album.mediaMetadata.artist?.toString() ?: ""
-    val coverArtUrl = album.mediaMetadata.artworkUri
+    // Ask the provider for the largest artwork it has, and key the cache by that size
+    // so a shelf thumbnail can never be reused in place of the full cover.
+    val coverArtUrl = album.mediaMetadata.extras?.getString("imageId")
+        ?.takeIf { it.isNotBlank() }
+        ?.let { imageId ->
+            album.mediaMetadata.getProvider()?.getImageUrl(imageId, LibraryType.ALBUM, 1080)
+        }
+        ?: album.mediaMetadata.artworkUri
+    val coverKey = "${album.mediaMetadata.id ?: album.mediaId}@1080"
 
     StandardCardContainer(
         modifier = if (width != null) modifier.width(width) else modifier.fillMaxWidth(),
@@ -50,9 +60,10 @@ fun TvAlbumCard(
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(coverArtUrl)
-                            .placeholderMemoryCacheKey(album.mediaMetadata.id ?: album.mediaId)
-                            .diskCacheKey(album.mediaMetadata.id ?: album.mediaId)
-                            .memoryCacheKey(album.mediaMetadata.id ?: album.mediaId)
+                            .size(1080)
+                            .placeholderMemoryCacheKey(coverKey)
+                            .diskCacheKey(coverKey)
+                            .memoryCacheKey(coverKey)
                             .diskCachePolicy(CachePolicy.ENABLED)
                             .crossfade(true)
                             .build(),
