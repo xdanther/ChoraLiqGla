@@ -76,6 +76,12 @@ abstract class MediaProvider {
     abstract suspend fun authenticate(username: String, password: String) : AuthenticationResponse
     abstract suspend fun createFavorite(ids: List<String>, type: LibraryType) : Boolean
     abstract suspend fun createInternetRadioStation(name: String, streamUrl: String, homepageUrl: String?) : Boolean
+    /**
+     * Creates a public link to [id] that stops working at [expiresAt]. Providers that
+     * cannot share return null, so callers just hide the action.
+     */
+    open suspend fun createShareLink(id: String, expiresAt: Long): String? = null
+
     abstract suspend fun createPlaylist(name: String, comment: String = "", ownerId: String = "", public: Boolean = false, queryBuilderRules: PlaylistRules? = null, sync: Boolean = false) : String?
     abstract suspend fun deleteFavorite(ids: List<String>, type: LibraryType) : Boolean
     abstract suspend fun deleteInternetRadioStation(id: String): Boolean

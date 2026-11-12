@@ -118,6 +118,12 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.foundation.Canvas
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import com.craftworks.music.util.QrCode
+import kotlinx.coroutines.launch
 import com.craftworks.music.player.ChoraMediaLibraryService
 import com.craftworks.music.ui.elements.tv.TvHorizontalSongCard
 import com.craftworks.music.ui.playing.LyricsView
@@ -156,8 +162,10 @@ fun TvNowPlaying(
     var infoOpen by remember { mutableStateOf(false) }
     var queueOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
+    var shareOpen by remember { mutableStateOf(false) }
 
     val sheetAlbumId = metadata?.extras?.getString("albumId").orEmpty()
+    val sheetSongId = metadata?.extras?.getString("id").orEmpty()
     var lyricsOpen by remember { mutableStateOf(false) }
     var sleepTimerOpen by remember { mutableStateOf(false) }
     var lastInteraction by remember { mutableLongStateOf(0L) }
@@ -178,9 +186,9 @@ fun TvNowPlaying(
     var barOwnsFocus by remember { mutableStateOf(false) }
 
     // The bar is a visiting guest: it fades away again so the artwork stays the main thing.
-    LaunchedEffect(barVisible, lastInteraction, infoOpen, queueOpen, moreOpen) {
+    LaunchedEffect(barVisible, lastInteraction, infoOpen, queueOpen, moreOpen, shareOpen) {
         if (!barVisible) return@LaunchedEffect
-        if (infoOpen || queueOpen || moreOpen) return@LaunchedEffect
+        if (infoOpen || queueOpen || moreOpen || shareOpen) return@LaunchedEffect
         delay(BAR_AUTO_HIDE_MILLIS)
         barVisible = false
     }
@@ -628,10 +636,19 @@ fun TvNowPlaying(
                 canShowLyrics = canShowLyrics,
                 lyricsOpen = lyricsOpen,
                 albumId = sheetAlbumId,
+                songId = sheetSongId,
                 onGoToAlbum = { moreOpen = false; onGoToAlbum() },
+                onShare = { moreOpen = false; shareOpen = true },
                 onSleepTimer = { moreOpen = false; sleepTimerOpen = true },
                 onToggleLyrics = { moreOpen = false; toggleLyrics() },
                 onDismiss = { moreOpen = false }
+            )
+
+        if (shareOpen)
+            TvShareSheet(
+                songId = sheetSongId,
+                title = metadata?.title?.toString().orEmpty(),
+                onDismiss = { shareOpen = false }
             )
 
         if (sleepTimerOpen)
@@ -1319,12 +1336,21 @@ private fun TvMoreSheet(
     canShowLyrics: Boolean,
     lyricsOpen: Boolean,
     albumId: String,
+    songId: String,
     onGoToAlbum: () -> Unit,
+    onShare: () -> Unit,
     onSleepTimer: () -> Unit,
     onToggleLyrics: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val first = remember { FocusRequester() }
+
+    val actions = buildList {
+        if (songId.isNotBlank()) add("Share Song" to onShare)
+        if (albumId.isNotBlank()) add("Go to Album" to onGoToAlbum)
+        if (canShowLyrics) add((if (lyricsOpen) "Hide Lyrics" else "Lyrics") to onToggleLyrics)
+        add("Sleep Timer" to onSleepTimer)
+    }
 
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
 
@@ -1337,27 +1363,171 @@ private fun TvMoreSheet(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            if (albumId.isNotBlank()) {
+            actions.forEachIndexed { index, action ->
                 MoreSheetRow(
-                    label = "Go to Album",
-                    modifier = Modifier.focusRequester(first),
-                    onClick = onGoToAlbum
+                    label = action.first,
+                    modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
+                    onClick = action.second
                 )
             }
+        }
+    }
+}
 
-            if (canShowLyrics) {
-                MoreSheetRow(
-                    label = if (lyricsOpen) "Hide Lyrics" else "Lyrics",
-                    modifier = if (albumId.isBlank()) Modifier.focusRequester(first) else Modifier,
-                    onClick = onToggleLyrics
-                )
-            }
+/** Share a song: a temporary public link, drawn as a code the phone can scan. */
+@Composable
+private fun TvShareSheet(
+    songId: String,
+    title: String,
+    onDismiss: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val first = remember { FocusRequester() }
 
-            MoreSheetRow(
-                label = "Sleep Timer",
-                modifier = if (albumId.isBlank() && !canShowLyrics) Modifier.focusRequester(first) else Modifier,
-                onClick = onSleepTimer
+    var link by remember { mutableStateOf<String?>(null) }
+    var lifetime by remember { mutableStateOf("") }
+    var pending by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+
+    val durations = listOf("15 minutes" to 15L, "1 hour" to 60L, "24 hours" to 1440L)
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .width(540.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF1C1C1E))
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = if (link == null) "Share Song" else title,
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+
+            if (link == null) {
+                Text(
+                    text = "Anyone with this link can listen until it expires.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                durations.forEachIndexed { index, duration ->
+                    MoreSheetRow(
+                        label = duration.first,
+                        modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
+                        onClick = {
+                            pending = true
+                            failed = false
+                            scope.launch {
+                                val expiresAt = System.currentTimeMillis() + duration.second * 60_000L
+                                val url = runCatching {
+                                    MediaProviderManager.currentProvider.value
+                                        ?.createShareLink(songId, expiresAt)
+                                }.getOrNull()
+                                pending = false
+                                if (url.isNullOrBlank()) {
+                                    failed = true
+                                } else {
+                                    link = url
+                                    lifetime = duration.first
+                                }
+                            }
+                        }
+                    )
+                }
+
+                if (pending)
+                    Text(
+                        text = "Creating link…",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 13.sp
+                    )
+
+                if (failed)
+                    Text(
+                        text = "This server cannot create share links.",
+                        color = Color(0xFFFF8A80),
+                        fontSize = 13.sp
+                    )
+            } else {
+                ShareQr(
+                    link = link.orEmpty(),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(248.dp)
+                )
+
+                Text(
+                    text = link.orEmpty(),
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = "Link expires in $lifetime",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                MoreSheetRow(
+                    label = "Done",
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .focusRequester(first),
+                    onClick = onDismiss
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareQr(link: String, modifier: Modifier = Modifier) {
+    val matrix = remember(link) { QrCode.encode(link, QrCode.Level.MEDIUM) }
+
+    if (matrix == null) {
+        Text(
+            text = "This link is too long for a code.",
+            color = Color.White.copy(alpha = 0.6f),
+            fontSize = 13.sp
+        )
+        return
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .padding(14.dp)
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val quiet = 4
+            val count = matrix.size + quiet * 2
+            val module = size.minDimension / count
+            for (row in matrix.indices) {
+                for (column in matrix.indices) {
+                    if (!matrix[row][column]) continue
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset((column + quiet) * module, (row + quiet) * module),
+                        size = Size(module, module)
+                    )
+                }
+            }
         }
     }
 }

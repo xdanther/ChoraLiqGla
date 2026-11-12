@@ -249,6 +249,11 @@ open class SubsonicMediaProvider : MediaProvider() {
         )
     }
 
+    override suspend fun createShareLink(id: String, expiresAt: Long): String? = runCatching {
+        service.createShare(listOf(id), null, expiresAt)
+            .subsonicResponse.shares?.share?.firstOrNull()?.url
+    }.getOrNull()
+
     override suspend fun createFavorite(
         ids: List<String>,
         type: LibraryType
