@@ -415,6 +415,8 @@ fun AnimatedBottomNavBar(
             )
         )
     ).value
+        // Search and the player belong to the TV sidebar, not the phone bar
+        .filter { it.screenRoute != Screen.Search && it.screenRoute != Screen.NowPlayingLandscape }
 
     orderedNavItems.first {it.screenRoute == Screen.Radios}.enabled =
         currentProvider?.featureFlags?.contains(ProviderFeature.INTERNET_RADIO) ?: false

@@ -162,6 +162,40 @@ class AppearanceSettingsManager @Inject constructor(
         }
     }
 
+    /**
+     * The TV sidebar also offers Search and the player. They live in the same list as
+     * the destinations so they can be reordered and switched off like the rest; the
+     * phone navigation bar filters them out. Old saved lists predate both, so they are
+     * merged in on read rather than requiring a migration write.
+     */
+    private fun withTvEntries(items: List<BottomNavItem>): List<BottomNavItem> {
+        val result = items.toMutableList()
+
+        if (result.none { it.screenRoute == Screen.Search }) {
+            val homeIndex = result.indexOfFirst { it.screenRoute == Screen.Home }
+            result.add(
+                if (homeIndex >= 0) homeIndex + 1 else 0,
+                BottomNavItem(
+                    context.getString(R.string.nav_search),
+                    R.drawable.rounded_search_24,
+                    Screen.Search
+                )
+            )
+        }
+
+        if (result.none { it.screenRoute == Screen.NowPlayingLandscape }) {
+            result.add(
+                BottomNavItem(
+                    context.getString(R.string.nav_playing),
+                    R.drawable.s_m_playback,
+                    Screen.NowPlayingLandscape
+                )
+            )
+        }
+
+        return result
+    }
+
     val bottomNavItemsFlow: Flow<List<BottomNavItem>> = context.dataStore.data.map { preferences ->
         val jsonString = preferences[BOTTOM_NAV_ITEMS_KEY]
         val defaultValue = listOf(
@@ -172,12 +206,13 @@ class AppearanceSettingsManager @Inject constructor(
             BottomNavItem(context.getString(R.string.nav_radios), R.drawable.rounded_radio, Screen.Radios),
             BottomNavItem(context.getString(R.string.nav_playlists), R.drawable.placeholder, Screen.Playlists)
         )
-        try {
+        val stored = try {
             jsonString?.let { Json.decodeFromString<List<BottomNavItem>>(it) } ?: defaultValue
         } catch (e: Exception) {
             println(e.message)
             defaultValue
         }
+        withTvEntries(stored)
     }
 
     suspend fun setBottomNavItems(items: List<BottomNavItem>) {

@@ -337,7 +337,9 @@ private fun TvSidebarPanel(
             )
         }
 
-        navItems.filter { it.enabled }.forEachIndexed { index, item ->
+        navItems
+            .filter { it.enabled && (it.screenRoute != Screen.NowPlayingLandscape || isPlayingVisible) }
+            .forEachIndexed { index, item ->
             TvSidebarItem(
                 label = item.title,
                 icon = ImageVector.vectorResource(item.icon),
