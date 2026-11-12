@@ -294,7 +294,7 @@ private fun TvSidebarPanel(
             // over whatever artwork sits behind the panel.
             .background(
                 Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.12f), Color.Black.copy(alpha = 0.24f))
+                    listOf(Color.Black.copy(alpha = 0.62f), Color.Black.copy(alpha = 0.48f))
                 )
             )
             .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(26.dp))

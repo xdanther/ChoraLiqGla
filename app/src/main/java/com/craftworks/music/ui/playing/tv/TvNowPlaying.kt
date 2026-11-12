@@ -196,12 +196,6 @@ fun TvNowPlaying(
         animationSpec = infiniteRepeatable(tween(30_000, easing = LinearEasing), RepeatMode.Reverse),
         label = "drift y"
     )
-    val contentLift by animateFloatAsState(
-        targetValue = if (barVisible) -46f else 0f,
-        animationSpec = tween(240),
-        label = "content lift"
-    )
-
     val isRadio = metadata?.mediaType == MediaMetadata.MEDIA_TYPE_RADIO_STATION
     val canShowLyrics = !isRadio && lyrics != null
 
@@ -426,7 +420,6 @@ fun TvNowPlaying(
                         Row(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .graphicsLayer { translationY = contentLift.dp.toPx() }
                                 .padding(horizontal = 56.dp)
                                 .padding(top = 24.dp, bottom = 24.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -482,6 +475,7 @@ fun TvNowPlaying(
                                 TvLyricsPane(
                                     tint = iconTextColor,
                                     largeText = largeLyrics,
+                                    metadata = metadata,
                                     mediaController = mediaController
                                 )
                             }
@@ -490,7 +484,6 @@ fun TvNowPlaying(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .graphicsLayer { translationY = contentLift.dp.toPx() }
                                 .padding(horizontal = 40.dp)
                                 .padding(top = 28.dp, bottom = 24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -773,9 +766,6 @@ private fun ApplePlayerBar(
             },
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        if (!isRadio)
-            TvPlaybackProgress(mediaController = mediaController, color = color)
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -806,7 +796,16 @@ private fun ApplePlayerBar(
                 )
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(18.dp))
+
+            if (!isRadio)
+                Box(Modifier.weight(1f)) {
+                    TvPlaybackProgress(mediaController = mediaController, color = color)
+                }
+            else
+                Spacer(Modifier.weight(1f))
+
+            Spacer(Modifier.width(18.dp))
 
             if (canShowLyrics) {
                 BarCircleButton(
@@ -1052,6 +1051,7 @@ private fun TvPlaybackProgress(
 private fun TvLyricsPane(
     tint: Color,
     largeText: Boolean,
+    metadata: MediaMetadata?,
     mediaController: MediaController?,
     modifier: Modifier = Modifier
 ) {
@@ -1085,9 +1085,23 @@ private fun TvLyricsPane(
     }
 
     val size = if (largeText) 34.sp else 28.sp
-    val section = (activeIndex * 3 / lines.size).coerceIn(0, 2)
 
     BoxWithConstraints(modifier.fillMaxSize()) {
+        // the lyrics keep the soft cover wash behind them
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(metadata?.artworkUri)
+                .crossfade(true)
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(24.dp))
+                .graphicsLayer { alpha = 0.30f }
+                .blur(46.dp)
+        )
+
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -1108,23 +1122,6 @@ private fun TvLyricsPane(
             }
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            repeat(3) { dot ->
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (dot == section) tint else tint.copy(alpha = 0.26f)
-                        )
-                )
-            }
-        }
     }
 }
 
