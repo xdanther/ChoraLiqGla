@@ -23,4 +23,5 @@
     <string name="tv_lyrics_apple_style_description">Big tinted lines over the blurred cover on the TV player</string>
     <string name="tv_lyrics_large_text">Larger lyrics text</string>
     <string name="tv_lyrics_large_text_description">Scale the lyrics up on the TV player</string>
+    <string name="background_style_drift">Drifting blur</string>
 </resources>

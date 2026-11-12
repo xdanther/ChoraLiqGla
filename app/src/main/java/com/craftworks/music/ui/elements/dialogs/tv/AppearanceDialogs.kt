@@ -220,6 +220,7 @@ fun BackgroundDialog(
                     NowPlayingBackground.PLAIN -> R.string.background_style_plain
                     NowPlayingBackground.STATIC_BLUR -> R.string.background_style_blur
                     NowPlayingBackground.ANIMATED_BLUR -> R.string.background_style_anim
+                    NowPlayingBackground.DRIFTING_BLUR -> R.string.background_style_drift
                 }
             )
         },

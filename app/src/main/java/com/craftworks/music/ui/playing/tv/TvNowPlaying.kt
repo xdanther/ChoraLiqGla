@@ -10,6 +10,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.snap
 import com.craftworks.music.ui.playing.NowPlayingAlignment
+import com.craftworks.music.ui.playing.NowPlayingBackground
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
@@ -140,6 +141,8 @@ fun TvNowPlaying(
     val largeLyrics by settings.largeLyricsText.collectAsStateWithLifecycle(true)
     val appleLyrics by settings.appleTvLyrics.collectAsStateWithLifecycle(false)
     val oledProtectionMode by settings.oledProtectionMode.collectAsStateWithLifecycle(OLEDProtectionMode.OFF)
+    val backgroundStyle by settings.npBackgroundFlow
+        .collectAsStateWithLifecycle(NowPlayingBackground.STATIC_BLUR)
 
     var barVisible by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
@@ -223,7 +226,12 @@ fun TvNowPlaying(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            // The plain, static and animated styles are drawn by NowPlaying_Background;
+            // only the drifting style needs an opaque base here.
+            .background(
+                if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR) Color.Black
+                else Color.Transparent
+            )
             .focusRequester(pageFocus)
             .focusable(true)
             .onKeyEvent { keyEvent ->
@@ -388,6 +396,7 @@ fun TvNowPlaying(
                     }
 
                     // Artwork, blurred out to a colour wash behind everything
+                    if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR)
                     AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(metadata?.artworkUri)
@@ -410,6 +419,7 @@ fun TvNowPlaying(
                             .blur(70.dp)
                     )
 
+                    if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR)
                     Box(
                         Modifier
                             .fillMaxSize()

@@ -12,7 +12,10 @@ import com.craftworks.music.ui.playing.background.PlainBackground
 import com.craftworks.music.ui.playing.background.StaticBlurBackground
 
 enum class NowPlayingBackground {
-    PLAIN, STATIC_BLUR, ANIMATED_BLUR
+    PLAIN, STATIC_BLUR, ANIMATED_BLUR,
+
+    /** The TV player's drifting cover; falls back to a static blur elsewhere. */
+    DRIFTING_BLUR
 }
 
 @Preview
@@ -31,6 +34,10 @@ fun NowPlaying_Background(
     when (backgroundStyle){
         NowPlayingBackground.PLAIN         -> PlainBackground()
         NowPlayingBackground.STATIC_BLUR   -> StaticBlurBackground(
+            colors = colorPalette,
+            overlayColor = overlayColor
+        )
+        NowPlayingBackground.DRIFTING_BLUR -> StaticBlurBackground(
             colors = colorPalette,
             overlayColor = overlayColor
         )

@@ -47,7 +47,8 @@ fun BackgroundDialog(setShowDialog: (Boolean) -> Unit) {
     val backgroundTypeLabels = mapOf(
         NowPlayingBackground.PLAIN to R.string.background_style_plain,
         NowPlayingBackground.STATIC_BLUR to R.string.background_style_blur,
-        NowPlayingBackground.ANIMATED_BLUR to R.string.background_style_anim
+        NowPlayingBackground.ANIMATED_BLUR to R.string.background_style_anim,
+        NowPlayingBackground.DRIFTING_BLUR to R.string.background_style_drift
     )
 
     AlertDialog(
