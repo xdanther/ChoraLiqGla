@@ -43,6 +43,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -120,6 +124,7 @@ fun TvNowPlaying(
     mediaController: MediaController? = null,
     iconColor: Color = Color.Black,
     metadata: MediaMetadata? = null,
+    onGoToAlbum: () -> Unit = {},
     onRefreshLyrics: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -474,21 +479,11 @@ fun TvNowPlaying(
                                     .fillMaxHeight()
                                     .padding(vertical = 12.dp)
                             ) {
-                                CompositionLocalProvider(
-                                    LocalDensity provides Density(
-                                        density = LocalDensity.current.density,
-                                        fontScale = LocalDensity.current.fontScale *
-                                                if (largeLyrics) 1.45f else 1f
-                                    )
-                                ) {
-                                    LyricsView(
-                                        iconTextColor,
-                                        true,
-                                        mediaController,
-                                        PaddingValues(horizontal = 12.dp),
-                                        onRefreshLyrics
-                                    )
-                                }
+                                TvLyricsPane(
+                                    tint = iconTextColor,
+                                    largeText = largeLyrics,
+                                    mediaController = mediaController
+                                )
                             }
                         }
                     } else {
@@ -560,6 +555,7 @@ fun TvNowPlaying(
                         TrackInfoCard(
                             metadata = metadata,
                             color = iconTextColor,
+                            onGoToAlbum = onGoToAlbum,
                             modifier = Modifier.padding(start = 40.dp, bottom = 150.dp)
                         )
                     }
@@ -1047,12 +1043,105 @@ private fun TvPlaybackProgress(
     }
 }
 
+/**
+ * tvOS-style lyrics: the lines themselves are the interface, big and rounded over
+ * the drifting artwork, the sung line fully lit and the rest faded back, with the
+ * three sheet dots showing where in the song the reader is.
+ */
+@Composable
+private fun TvLyricsPane(
+    tint: Color,
+    largeText: Boolean,
+    mediaController: MediaController?,
+    modifier: Modifier = Modifier
+) {
+    val lyrics = LyricsState.lyrics.collectAsStateWithLifecycle().value ?: return
+
+    val lines = remember(lyrics) {
+        lyrics.lines
+            .map { line -> line.startMs to line.lines.joinToString(" ") { it.text }.trim() }
+            .filter { it.second.isNotBlank() }
+    }
+
+    if (lines.isEmpty()) return
+
+    var positionMs by remember { mutableIntStateOf(mediaController?.currentPosition?.toInt() ?: 0) }
+
+    LaunchedEffect(mediaController) {
+        val controller = mediaController ?: return@LaunchedEffect
+        while (true) {
+            positionMs = controller.currentPosition.toInt()
+            delay(400)
+        }
+    }
+
+    val activeIndex = remember(positionMs, lines) {
+        lines.indexOfLast { it.first <= positionMs }.coerceAtLeast(0)
+    }
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(activeIndex) {
+        runCatching { listState.animateScrollToItem(activeIndex) }
+    }
+
+    val size = if (largeText) 34.sp else 28.sp
+    val section = (activeIndex * 3 / lines.size).coerceIn(0, 2)
+
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = maxHeight * 0.36f),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            itemsIndexed(lines) { index, line ->
+                val active = index == activeIndex
+                Text(
+                    text = line.second,
+                    fontSize = if (active) size else size * 0.86f,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    fontFamily = FontFamily.SansSerif,
+                    lineHeight = size * 1.16f,
+                    color = tint.copy(alpha = if (active) 1f else 0.40f),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            repeat(3) { dot ->
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (dot == section) tint else tint.copy(alpha = 0.26f)
+                        )
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun TrackInfoCard(
     metadata: MediaMetadata?,
     color: Color,
+    onGoToAlbum: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val ctaFocus = remember { FocusRequester() }
+
+    // The card is opened from the bar, so it claims focus to make the pill reachable
+    LaunchedEffect(Unit) {
+        runCatching { ctaFocus.requestFocus() }
+    }
+
     val durationMs = metadata?.durationMs ?: 0L
     val minutes = durationMs / 60_000L
     val seconds = (durationMs % 60_000L) / 1000L
@@ -1134,6 +1223,25 @@ private fun TrackInfoCard(
                         .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
                         .padding(horizontal = 7.dp, vertical = 2.dp)
                 )
+        }
+
+        Button(
+            onClick = onGoToAlbum,
+            modifier = Modifier
+                .focusRequester(ctaFocus)
+                .focusProperties { up = FocusRequester.Cancel },
+            shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+            colors = ButtonDefaults.colors(
+                containerColor = Color.White.copy(alpha = 0.16f),
+                disabledContainerColor = Color.White.copy(alpha = 0.16f),
+                contentColor = Color(0xFF4D9BFF),
+                disabledContentColor = Color(0xFF4D9BFF).copy(alpha = 0.3f),
+                focusedContainerColor = Color.White,
+                focusedContentColor = Color(0xFF1D5FD0)
+            )
+        ) {
+            Text(text = "Go to Album", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

@@ -91,7 +91,16 @@ fun NowPlayingContent(
         TvNowPlaying(
             mediaController,
             iconTextColor,
-            metadata
+            metadata,
+            onGoToAlbum = {
+                val albumId = metadata?.extras?.getString("albumId")
+                if (!albumId.isNullOrBlank()) {
+                    onHide()
+                    navHostController.navigate(
+                        Screen.AlbumDetails(albumId, metadata?.artworkUri?.toString().orEmpty())
+                    ) { launchSingleTop = true }
+                }
+            }
         )
     } else if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
         NowPlayingLandscape(
