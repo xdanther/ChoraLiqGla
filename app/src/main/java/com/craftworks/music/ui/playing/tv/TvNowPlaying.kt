@@ -129,6 +129,7 @@ fun TvNowPlaying(
     mediaController: MediaController? = null,
     iconColor: Color = Color.Black,
     metadata: MediaMetadata? = null,
+    palette: List<Color> = emptyList(),
     onGoToAlbum: () -> Unit = {},
     onDownload: () -> Unit = {},
     onRefreshLyrics: () -> Unit = {}
@@ -168,16 +169,32 @@ fun TvNowPlaying(
     }
 
     // Focus can only follow the bar once its nodes exist, so it waits for composition
+    // The bar only exists once its enter animation has composed a node, so focus is
+    // retried instead of asked for once: otherwise the bar appears but the page keeps
+    // the remote and left/right seek instead of moving through its buttons.
     LaunchedEffect(barVisible, showAppleBar) {
         if (barVisible) {
-            if (showAppleBar) barFocus.requestFocusSafely() else classicBarFocus.requestFocusSafely()
+            repeat(16) {
+                val got = if (showAppleBar) {
+                    barFocus.requestFocusSafely()
+                } else {
+                    classicBarFocus.requestFocusSafely()
+                }
+                if (got) return@LaunchedEffect
+                delay(40)
+            }
         } else {
             pageFocus.requestFocusSafely()
         }
     }
 
     LaunchedEffect(barFocusTicket) {
-        if (barFocusTicket > 0) barFocus.requestFocusSafely()
+        if (barFocusTicket > 0) {
+            repeat(16) {
+                if (barFocus.requestFocusSafely()) return@LaunchedEffect
+                delay(40)
+            }
+        }
     }
 
     val iconTextColor by animateColorAsState(
@@ -390,47 +407,14 @@ fun TvNowPlaying(
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val sideBySideLyrics = lyricsOpen && canShowLyrics
                     val coverSize = if (sideBySideLyrics) {
-                        minOf(maxWidth * 0.26f, maxHeight * 0.38f)
+                        minOf(maxWidth * 0.26f, maxHeight * 0.46f)
                     } else {
-                        minOf(maxWidth * 0.40f, maxHeight * 0.50f)
+                        minOf(maxWidth * 0.28f, maxHeight * 0.50f)
                     }
 
-                    // Artwork, blurred out to a colour wash behind everything
+                    // A wash built from the cover's own colours, drifting slowly
                     if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR)
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(metadata?.artworkUri)
-                            .placeholderMemoryCacheKey(metadata?.id)
-                            .diskCachePolicy(CachePolicy.DISABLED)
-                            .memoryCachePolicy(CachePolicy.DISABLED)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                scaleX = driftScale
-                                scaleY = driftScale
-                                translationX = driftX
-                                translationY = driftY
-                                alpha = 0.7f
-                            }
-                            .blur(70.dp)
-                    )
-
-                    if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR)
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    0f to Color.Black.copy(alpha = 0.55f),
-                                    0.35f to Color.Black.copy(alpha = 0.15f),
-                                    1f to Color.Black.copy(alpha = 0.85f)
-                                )
-                            )
-                    )
+                        DriftingWash(palette)
 
                     if (sideBySideLyrics) {
                         // Lyrics get the right half, the artwork keeps the left
@@ -529,9 +513,9 @@ fun TvNowPlaying(
                                 text = metadata?.albumTitle?.toString()
                                     ?.ifBlank { null }
                                     ?: metadata?.artist?.toString().orEmpty(),
-                                fontSize = 16.sp,
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = iconTextColor.copy(alpha = 0.78f),
+                                color = iconTextColor.copy(alpha = 0.62f),
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -554,7 +538,7 @@ fun TvNowPlaying(
                                 )
                                 Text(
                                     text = metadata?.title?.toString().orEmpty(),
-                                    fontSize = 26.sp,
+                                    fontSize = 22.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = iconTextColor,
                                     maxLines = 1,
@@ -566,8 +550,8 @@ fun TvNowPlaying(
 
                             Text(
                                 text = metadata?.artist?.toString().orEmpty(),
-                                fontSize = 17.sp,
-                                color = iconTextColor.copy(alpha = 0.62f),
+                                fontSize = 18.sp,
+                                color = iconTextColor.copy(alpha = 0.60f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -580,16 +564,13 @@ fun TvNowPlaying(
                         visible = infoOpen,
                         enter = fadeIn(tween(200)),
                         exit = fadeOut(tween(200)),
-                        modifier = Modifier.align(Alignment.BottomStart)
+                        modifier = Modifier.align(Alignment.BottomCenter)
                     ) {
                         TrackInfoCard(
                             metadata = metadata,
                             color = iconTextColor,
                             onGoToAlbum = onGoToAlbum,
-                            onRefreshLyrics = onRefreshLyrics,
-                            onPlayNext = { mediaController.insertAfterCurrent() },
-                            onAddToQueue = { mediaController.appendToQueue() },
-                            modifier = Modifier.padding(start = 40.dp, bottom = 150.dp)
+                            modifier = Modifier.padding(start = 48.dp, end = 48.dp, bottom = 146.dp)
                         )
                     }
                 }
@@ -669,8 +650,6 @@ fun TvNowPlaying(
                     infoOpen = !infoOpen
                     lastInteraction = System.nanoTime()
                 },
-                onDownload = onDownload,
-                onOpenSleepTimer = { sleepTimerOpen = true },
                 onInteraction = { lastInteraction = System.nanoTime() }
             )
         }
@@ -796,8 +775,6 @@ private fun ApplePlayerBar(
     onDismiss: () -> Unit,
     onToggleLyrics: () -> Unit,
     onToggleInfo: () -> Unit,
-    onDownload: () -> Unit,
-    onOpenSleepTimer: () -> Unit,
     onInteraction: () -> Unit
 ) {
     Column(
@@ -807,7 +784,6 @@ private fun ApplePlayerBar(
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     onInteraction()
-                    // UP puts the bar away instead of re-selecting its buttons forever
                     if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
                         keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK
                     ) {
@@ -817,8 +793,11 @@ private fun ApplePlayerBar(
                 }
                 false
             },
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        if (!isRadio)
+            TvPlaybackProgress(mediaController = mediaController, color = color)
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -832,69 +811,32 @@ private fun ApplePlayerBar(
                         up = FocusRequester.Cancel
                     },
                 shape = ButtonDefaults.shape(shape = CircleShape),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
                 colors = ButtonDefaults.colors(
-                    containerColor = Color.White.copy(alpha = 0.14f),
-                    disabledContainerColor = Color.White.copy(alpha = 0.14f),
-                    contentColor = color,
-                    disabledContentColor = color.copy(alpha = 0.3f),
+                    containerColor = Color.White.copy(alpha = 0.18f),
+                    disabledContainerColor = Color.White.copy(alpha = 0.18f),
+                    contentColor = Color.White,
+                    disabledContentColor = Color.White.copy(alpha = 0.3f),
                     focusedContainerColor = Color.White,
                     focusedContentColor = Color.Black
                 )
             ) {
-                Text(
-                    text = "Info",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Text(text = "Info", fontSize = 15.sp, fontWeight = FontWeight.Medium)
             }
 
-            Spacer(Modifier.width(18.dp))
+            Spacer(Modifier.weight(1f))
 
-            if (!isRadio)
-                Box(Modifier.weight(1f)) {
-                    TvPlaybackProgress(mediaController = mediaController, color = color)
-                }
-            else
-                Spacer(Modifier.weight(1f))
-
-            Spacer(Modifier.width(18.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (canShowLyrics) {
                 BarCircleButton(
-                    icon = R.drawable.rounded_download_24,
-                    contentDescription = "Download",
-                    active = false,
+                    icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
+                    contentDescription = "Lyrics",
+                    active = lyricsOpen,
                     modifier = Modifier.focusProperties {
                         down = pageFocus
                         up = FocusRequester.Cancel
                     },
-                    onClick = onDownload
+                    onClick = onToggleLyrics
                 )
-
-                BarCircleButton(
-                    icon = R.drawable.rounded_timer_24,
-                    contentDescription = "Sleep timer",
-                    active = false,
-                    modifier = Modifier.focusProperties {
-                        down = pageFocus
-                        up = FocusRequester.Cancel
-                    },
-                    onClick = onOpenSleepTimer
-                )
-
-                if (canShowLyrics) {
-                    BarCircleButton(
-                        icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
-                        contentDescription = "Lyrics",
-                        active = lyricsOpen,
-                        modifier = Modifier.focusProperties {
-                            down = pageFocus
-                            up = FocusRequester.Cancel
-                        },
-                        onClick = onToggleLyrics
-                    )
-                }
             }
         }
     }
@@ -1295,19 +1237,10 @@ private fun TrackInfoCard(
     metadata: MediaMetadata?,
     color: Color,
     onGoToAlbum: () -> Unit = {},
-    onRefreshLyrics: () -> Unit = {},
-    onPlayNext: () -> Unit = {},
-    onAddToQueue: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val ctaFocus = remember { FocusRequester() }
     val albumId = metadata?.extras?.getString("albumId").orEmpty()
-
-    // The card is opened from the bar, so it claims focus to make the pill reachable
-    LaunchedEffect(albumId) {
-        if (albumId.isNotBlank()) runCatching { ctaFocus.requestFocus() }
-    }
-
     val durationMs = metadata?.durationMs ?: 0L
     val minutes = durationMs / 60_000L
     val seconds = (durationMs % 60_000L) / 1000L
@@ -1317,156 +1250,162 @@ private fun TrackInfoCard(
             format?.contains("ALAC") == true ||
             (bitrate ?: 0) >= 700
 
-    Column(
+    LaunchedEffect(albumId) {
+        if (albumId.isNotBlank()) runCatching { ctaFocus.requestFocus() }
+    }
+
+    Row(
         modifier = modifier
-            .widthIn(max = 420.dp)
+            .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.Black.copy(alpha = 0.42f))
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .background(Color.Black.copy(alpha = 0.34f))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(metadata?.artworkUri)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                fallback = painterResource(R.drawable.placeholder),
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(8.dp))
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(metadata?.artworkUri)
+                .crossfade(true)
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            fallback = painterResource(R.drawable.placeholder),
+            modifier = Modifier
+                .size(66.dp)
+                .clip(RoundedCornerShape(8.dp))
+        )
+
+        Spacer(Modifier.width(16.dp))
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = metadata?.title?.toString().orEmpty(),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(Modifier.width(14.dp))
+            Text(
+                text = listOfNotNull(
+                    metadata?.artist?.toString()?.takeIf { it.isNotBlank() },
+                    metadata?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
+                ).joinToString(" – "),
+                fontSize = 18.sp,
+                color = Color.White.copy(alpha = 0.88f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Text(
-                    text = metadata?.title?.toString().orEmpty(),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = color,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = listOfNotNull(
-                        metadata?.artist?.toString()?.takeIf { it.isNotBlank() },
-                        metadata?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
-                    ).joinToString(" – "),
-                    fontSize = 14.sp,
-                    color = color.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
             if (durationMs > 0)
                 Text(
-                    text = "$minutes min, $seconds sec",
-                    fontSize = 13.sp,
-                    color = color.copy(alpha = 0.7f)
+                    text = "$minutes min, $seconds secs",
+                    fontSize = 16.sp,
+                    color = Color.White.copy(alpha = 0.75f)
                 )
 
             if (lossless)
                 Text(
-                    text = "Lossless",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    text = "◐  Lossless",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
                     color = Color.White,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                        .padding(top = 2.dp)
+                        .clip(RoundedCornerShape(50))
+                        .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(50))
+                        .padding(horizontal = 12.dp, vertical = 3.dp)
                 )
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.width(20.dp))
+
         if (albumId.isNotBlank())
-        Button(
-            onClick = onGoToAlbum,
-            modifier = Modifier
-                .focusRequester(ctaFocus)
-                .focusProperties { up = FocusRequester.Cancel },
-            shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
-            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-            colors = ButtonDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.16f),
-                disabledContainerColor = Color.White.copy(alpha = 0.16f),
-                contentColor = Color(0xFF4D9BFF),
-                disabledContentColor = Color(0xFF4D9BFF).copy(alpha = 0.3f),
-                focusedContainerColor = Color.White,
-                focusedContentColor = Color(0xFF1D5FD0)
-            )
-        ) {
-            Text(text = "Go to Album", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        }
-
-        Button(
-            onClick = onPlayNext,
-            modifier = Modifier.focusProperties { up = FocusRequester.Cancel },
-            shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            colors = ButtonDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.12f),
-                disabledContainerColor = Color.White.copy(alpha = 0.12f),
-                contentColor = color.copy(alpha = 0.85f),
-                disabledContentColor = color.copy(alpha = 0.3f),
-                focusedContainerColor = Color.White,
-                focusedContentColor = Color.Black
-            )
-        ) {
-            Text(text = "Play next", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(
-            onClick = onAddToQueue,
-            modifier = Modifier.focusProperties { up = FocusRequester.Cancel },
-            shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            colors = ButtonDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.12f),
-                disabledContainerColor = Color.White.copy(alpha = 0.12f),
-                contentColor = color.copy(alpha = 0.85f),
-                disabledContentColor = color.copy(alpha = 0.3f),
-                focusedContainerColor = Color.White,
-                focusedContentColor = Color.Black
-            )
-        ) {
-            Text(text = "Add to queue", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        }
-
-        Button(
-            onClick = onRefreshLyrics,
-            modifier = Modifier.focusProperties { up = FocusRequester.Cancel },
-            shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
-            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-            colors = ButtonDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.12f),
-                disabledContainerColor = Color.White.copy(alpha = 0.12f),
-                contentColor = color.copy(alpha = 0.85f),
-                disabledContentColor = color.copy(alpha = 0.3f),
-                focusedContainerColor = Color.White,
-                focusedContentColor = Color.Black
-            )
-        ) {
-            Text(text = "Refresh lyrics", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        }
-        }
-        }
+            Button(
+                onClick = onGoToAlbum,
+                modifier = Modifier
+                    .focusRequester(ctaFocus)
+                    .focusProperties { up = FocusRequester.Cancel },
+                shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
+                contentPadding = PaddingValues(horizontal = 28.dp, vertical = 12.dp),
+                colors = ButtonDefaults.colors(
+                    containerColor = Color(0xFFC8DDFF),
+                    disabledContainerColor = Color(0xFFC8DDFF),
+                    contentColor = Color.Black,
+                    disabledContentColor = Color.Black.copy(alpha = 0.4f),
+                    focusedContainerColor = Color.White,
+                    focusedContentColor = Color.Black
+                )
+            ) {
+                Text(text = "Go to Album", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
     }
 }
 
+/** The wash the reference player shows: the cover's colours drifting, not the cover. */
+@Composable
+private fun DriftingWash(palette: List<Color>) {
+    val drift = rememberInfiniteTransition(label = "wash drift")
+    val scale by drift.animateFloat(
+        initialValue = 1.18f,
+        targetValue = 1.38f,
+        animationSpec = infiniteRepeatable(tween(30_000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "wash scale"
+    )
+    val shiftX by drift.animateFloat(
+        initialValue = -70f,
+        targetValue = 70f,
+        animationSpec = infiniteRepeatable(tween(42_000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "wash x"
+    )
+    val shiftY by drift.animateFloat(
+        initialValue = -40f,
+        targetValue = 40f,
+        animationSpec = infiniteRepeatable(tween(36_000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "wash y"
+    )
+
+    val fallback = listOf(Color(0xFF6B1B1B), Color(0xFFB23A1E), Color(0xFF1A0C0C))
+    val colors = if (palette.size >= 2) palette else fallback
+
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = shiftX
+                    translationY = shiftY
+                }
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            colors[0],
+                            colors.getOrNull(1) ?: colors[0],
+                            colors.getOrNull(2) ?: colors[0],
+                            colors.getOrNull(1) ?: colors[0]
+                        )
+                    )
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Black.copy(alpha = 0.24f),
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.36f)
+                        )
+                    )
+                )
+        )
+    }
+}

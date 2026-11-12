@@ -92,6 +92,7 @@ fun NowPlayingContent(
             mediaController,
             iconTextColor,
             metadata,
+            palette = colors,
             onDownload = { metadata?.let { viewModel.downloadSong(it) } },
             onRefreshLyrics = { viewModel.refreshLyrics(metadata) },
             onGoToAlbum = {
