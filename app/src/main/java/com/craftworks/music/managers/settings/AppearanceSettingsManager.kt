@@ -239,6 +239,19 @@ class AppearanceSettingsManager @Inject constructor(
         preferences[APPLE_PLAYER_BAR] ?: true
     }
 
+    /** Bigger lyric type on the TV player, like the reference player. */
+    val largeLyricsText: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[booleanPreferencesKey("large_lyrics_text")] ?: true
+    }
+
+    suspend fun setLargeLyricsText(large: Boolean) {
+        withContext(NonCancellable) {
+            context.dataStore.edit { preferences ->
+                preferences[booleanPreferencesKey("large_lyrics_text")] = large
+            }
+        }
+    }
+
     suspend fun setShowApplePlayerBar(show: Boolean) {
         withContext(NonCancellable) {
             context.dataStore.edit { preferences ->

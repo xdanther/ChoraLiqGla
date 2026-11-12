@@ -40,6 +40,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -124,6 +127,7 @@ fun TvNowPlaying(
 
     val showAppleBar by settings.showApplePlayerBar.collectAsStateWithLifecycle(true)
     val showClassicBar by settings.showClassicPlayerBar.collectAsStateWithLifecycle(false)
+    val largeLyrics by settings.largeLyricsText.collectAsStateWithLifecycle(true)
     val oledProtectionMode by settings.oledProtectionMode.collectAsStateWithLifecycle(OLEDProtectionMode.OFF)
 
     var barVisible by remember { mutableStateOf(false) }
@@ -470,13 +474,21 @@ fun TvNowPlaying(
                                     .fillMaxHeight()
                                     .padding(vertical = 12.dp)
                             ) {
-                                LyricsView(
-                                    iconTextColor,
-                                    true,
-                                    mediaController,
-                                    PaddingValues(horizontal = 20.dp),
-                                    onRefreshLyrics
-                                )
+                                CompositionLocalProvider(
+                                    LocalDensity provides Density(
+                                        density = LocalDensity.current.density,
+                                        fontScale = LocalDensity.current.fontScale *
+                                                if (largeLyrics) 1.45f else 1f
+                                    )
+                                ) {
+                                    LyricsView(
+                                        iconTextColor,
+                                        true,
+                                        mediaController,
+                                        PaddingValues(horizontal = 12.dp),
+                                        onRefreshLyrics
+                                    )
+                                }
                             }
                         }
                     } else {

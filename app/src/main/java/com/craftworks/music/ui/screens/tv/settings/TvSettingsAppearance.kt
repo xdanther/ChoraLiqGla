@@ -213,6 +213,19 @@ fun TvS_AppearanceScreen() {
         // Switches
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Lyrics text size
+                val largeLyrics by AppearanceSettingsManager(context).largeLyricsText.collectAsState(true)
+                SettingsSwitchItem(
+                    title = "Larger lyrics text",
+                    icon = ImageVector.vectorResource(R.drawable.rounded_sort_24),
+                    checked = largeLyrics,
+                    onCheckedChange = {
+                        coroutineScope.launch {
+                            AppearanceSettingsManager(context).setLargeLyricsText(it)
+                        }
+                    }
+                )
+
                 // Lyrics blur
                 val nowPlayingLyricsBlur by AppearanceSettingsManager(context).nowPlayingLyricsBlurFlow.collectAsState(
                     true
