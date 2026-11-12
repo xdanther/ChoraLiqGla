@@ -105,7 +105,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 /** How long the player bar lingers after the last remote key press. */
-private const val BAR_AUTO_HIDE_MILLIS = 4_500L
+private const val BAR_AUTO_HIDE_MILLIS = 6_500L
 
 @Preview(device = "id:tv_1080p", showBackground = true, showSystemUi = true)
 @Composable
@@ -242,9 +242,10 @@ fun TvNowPlaying(
 
                     // Bar is up but the page still owns the focus.
                     else -> when (keyCode) {
-                        // UP again puts the bar away
+                        // UP moves the selection back into the bar instead of hiding it
                         KeyEvent.KEYCODE_DPAD_UP -> {
-                            hideBar()
+                            lastInteraction = System.nanoTime()
+                            barFocusTicket++
                             true
                         }
 
