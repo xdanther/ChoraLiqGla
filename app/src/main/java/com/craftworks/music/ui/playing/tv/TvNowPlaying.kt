@@ -148,6 +148,9 @@ import kotlinx.coroutines.isActive
 /** How long the player bar lingers after the last remote key press. */
 private const val BAR_AUTO_HIDE_MILLIS = 5_000L
 
+/** Share links the player hands out always last a day. */
+private const val SHARE_LINK_LIFETIME_MILLIS = 24L * 60L * 60L * 1000L
+
 @Preview(device = "id:tv_1080p", showBackground = true, showSystemUi = true)
 @Composable
 fun TvNowPlaying(
@@ -776,6 +779,7 @@ fun TvNowPlaying(
                 lyricsOpen = lyricsOpen,
                 queueOpen = queueOpen,
                 favorite = favorite,
+                hasArtist = !metadata?.extras?.getString("artistId").isNullOrBlank(),
                 entryFocus = barFocus,
                 onToggleLyrics = {
                     lyricsOpen = !lyricsOpen
@@ -793,7 +797,9 @@ fun TvNowPlaying(
                         onToggleFavorite(songId, favorite)
                     }
                 },
-                onOpenMore = { moreOpen = true },
+                onGoToArtist = onGoToArtist,
+                onShare = { shareOpen = true },
+                onSleepTimer = { sleepTimerOpen = true },
                 onDismiss = {
                     barVisible = false
                     pageFocus.requestFocusSafely()
@@ -927,12 +933,15 @@ private fun ApplePlayerBar(
     lyricsOpen: Boolean,
     queueOpen: Boolean,
     favorite: Boolean,
+    hasArtist: Boolean,
     entryFocus: FocusRequester,
     onToggleLyrics: () -> Unit,
     onOpenQueue: () -> Unit,
     onToggleInfo: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onOpenMore: () -> Unit,
+    onGoToArtist: () -> Unit,
+    onShare: () -> Unit,
+    onSleepTimer: () -> Unit,
     onDismiss: () -> Unit,
     onInteraction: () -> Unit
 ) {
@@ -968,14 +977,6 @@ private fun ApplePlayerBar(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            UnavailableCircle(
-                icon = R.drawable.rounded_mic_24,
-                contentDescription = "Sing along is not available",
-                tint = color
-            )
-
-            Spacer(Modifier.width(12.dp))
-
             BarCircleButton(
                 icon = if (favorite) R.drawable.round_favorite_24 else R.drawable.round_favorite_border_24,
                 contentDescription = if (favorite) "Remove from favourites" else "Add to favourites",
@@ -986,16 +987,18 @@ private fun ApplePlayerBar(
                 onClick = onToggleFavorite
             )
 
-            Spacer(Modifier.width(12.dp))
+            if (hasArtist) {
+                Spacer(Modifier.width(12.dp))
 
-            BarCircleButton(
-                icon = R.drawable.rounded_more_horiz_24,
-                contentDescription = "More",
-                active = false,
-                tint = color,
-                size = 44.dp,
-                onClick = onOpenMore
-            )
+                BarCircleButton(
+                    icon = R.drawable.rounded_artist_24,
+                    contentDescription = "Go to Artist",
+                    active = false,
+                    tint = color,
+                    size = 44.dp,
+                    onClick = onGoToArtist
+                )
+            }
         }
 
         if (!isRadio)
@@ -1028,20 +1031,26 @@ private fun ApplePlayerBar(
 
             Spacer(Modifier.weight(1f))
 
-            UnavailableCircle(
-                icon = R.drawable.rounded_mic_24,
-                contentDescription = "Sing along is not available",
-                tint = color
+            // A share link always lives for a day, so the button is one press to a
+            // working code rather than a menu of lifetimes.
+            BarCircleButton(
+                icon = R.drawable.rounded_share_24,
+                contentDescription = "Share song",
+                active = false,
+                tint = color,
+                size = 44.dp,
+                onClick = onShare
             )
 
             Spacer(Modifier.width(10.dp))
 
-            // Android has no AirPlay to hand over to, and no route picker either, so
-            // the device button sits where tvOS puts it, dimmed, instead of pretending.
-            UnavailableCircle(
-                icon = R.drawable.rounded_airplay_24,
-                contentDescription = "No output device to choose",
-                tint = color
+            BarCircleButton(
+                icon = R.drawable.rounded_timer_24,
+                contentDescription = "Sleep timer",
+                active = false,
+                tint = color,
+                size = 44.dp,
+                onClick = onSleepTimer
             )
 
             Spacer(Modifier.width(16.dp))
@@ -1055,26 +1064,6 @@ private fun ApplePlayerBar(
                 onQueue = onOpenQueue
             )
         }
-    }
-}
-
-/** Something tvOS offers and this platform does not: drawn, never focusable. */
-@Composable
-private fun UnavailableCircle(icon: Int, contentDescription: String, tint: Color, size: Dp = 44.dp) {
-    val shade = if (tint.luminance() > 0.5f) Color.White else Color.Black
-
-    Box(
-        modifier = Modifier
-            .size(size)
-            .background(shade.copy(alpha = 0.08f), CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            painter = painterResource(icon),
-            contentDescription = contentDescription,
-            tint = tint.copy(alpha = 0.30f),
-            modifier = Modifier.size(size * 0.5f)
-        )
     }
 }
 
@@ -1710,17 +1699,38 @@ private fun TvShareSheet(
     title: String,
     onDismiss: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
     val first = remember { FocusRequester() }
 
     var link by remember { mutableStateOf<String?>(null) }
-    var lifetime by remember { mutableStateOf("") }
-    var pending by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    // A share link always lives for a day, and the sheet asks for it as soon as it is
+    // open rather than making the viewer pick a lifetime with the remote first.
+    LaunchedEffect(songId) {
+        if (songId.isBlank()) {
+            pending = false
+            failed = true
+            return@LaunchedEffect
+        }
+        val expiresAt = System.currentTimeMillis() + SHARE_LINK_LIFETIME_MILLIS
+        val url = runCatching {
+            MediaProviderManager.currentProvider.value?.createShareLink(songId, expiresAt)
+        }.getOrNull()
+        pending = false
+        if (url.isNullOrBlank()) failed = true else link = url
+    }
 
-    val durations = listOf("15 minutes" to 15L, "1 hour" to 60L, "24 hours" to 1440L)
+    // The only row in the sheet only exists once the request settles, so focus waits
+    // for it instead of asking once at composition.
+    LaunchedEffect(link, failed) {
+        if (link != null || failed) {
+            repeat(10) {
+                if (runCatching { first.requestFocus() }.isSuccess) return@LaunchedEffect
+                delay(40)
+            }
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -1732,7 +1742,7 @@ private fun TvShareSheet(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = if (link == null) "Share Song" else title,
+                text = title.ifBlank { "Share Song" },
                 color = Color.White,
                 fontSize = TvType.headline.fontSize,
                 fontWeight = FontWeight.SemiBold,
@@ -1740,84 +1750,62 @@ private fun TvShareSheet(
                 overflow = TextOverflow.Ellipsis
             )
 
-            if (link == null) {
-                Text(
-                    text = "Anyone with this link can listen until it expires.",
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = TvType.callout.fontSize,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
+            when {
+                link != null -> {
+                    ShareQr(
+                        link = link.orEmpty(),
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .size(248.dp)
+                    )
 
-                durations.forEachIndexed { index, duration ->
+                    Text(
+                        text = link.orEmpty(),
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = TvType.callout.fontSize,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = "Any device on this network can listen for 24 hours",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = TvType.callout.fontSize,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
                     MoreSheetRow(
-                        label = duration.first,
-                        modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
-                        onClick = {
-                            pending = true
-                            failed = false
-                            scope.launch {
-                                val expiresAt = System.currentTimeMillis() + duration.second * 60_000L
-                                val url = runCatching {
-                                    MediaProviderManager.currentProvider.value
-                                        ?.createShareLink(songId, expiresAt)
-                                }.getOrNull()
-                                pending = false
-                                if (url.isNullOrBlank()) {
-                                    failed = true
-                                } else {
-                                    link = url
-                                    lifetime = duration.first
-                                }
-                            }
-                        }
+                        label = "Done",
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .focusRequester(first),
+                        onClick = onDismiss
                     )
                 }
 
-                if (pending)
-                    Text(
-                        text = "Creating link…",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = TvType.callout.fontSize
-                    )
-
-                if (failed)
+                failed -> {
                     Text(
                         text = "This server cannot create share links.",
                         color = Color(0xFFFF8A80),
                         fontSize = TvType.callout.fontSize
                     )
-            } else {
-                ShareQr(
-                    link = link.orEmpty(),
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .size(248.dp)
-                )
 
-                Text(
-                    text = link.orEmpty(),
+                    MoreSheetRow(
+                        label = "Close",
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .focusRequester(first),
+                        onClick = onDismiss
+                    )
+                }
+
+                else -> Text(
+                    text = if (pending) "Creating a 24 hour link…" else "",
                     color = Color.White.copy(alpha = 0.6f),
-                    fontSize = TvType.callout.fontSize,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    text = "Link expires in $lifetime",
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = TvType.callout.fontSize,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                MoreSheetRow(
-                    label = "Done",
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .focusRequester(first),
-                    onClick = onDismiss
+                    fontSize = TvType.callout.fontSize
                 )
             }
         }
