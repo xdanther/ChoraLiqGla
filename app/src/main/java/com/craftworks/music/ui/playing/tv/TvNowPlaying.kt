@@ -939,7 +939,7 @@ private fun ApplePlayerBar(
                 modifier = Modifier
                     .padding(end = 10.dp)
                     .focusProperties {
-                        up = FocusRequester.Cancel
+                        up = progressFocus
                     },
                 onClick = onOpenQueue
             )
@@ -952,7 +952,7 @@ private fun ApplePlayerBar(
                 modifier = Modifier
                     .padding(end = 10.dp)
                     .focusProperties {
-                        up = FocusRequester.Cancel
+                        up = progressFocus
                     },
                 onClick = onOpenMore
             )
@@ -965,7 +965,7 @@ private fun ApplePlayerBar(
                     active = lyricsOpen,
                     modifier = Modifier.focusProperties {
                         down = pageFocus
-                        up = FocusRequester.Cancel
+                        up = progressFocus
                     },
                     onClick = onToggleLyrics
                 )
