@@ -10,6 +10,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -748,6 +751,18 @@ private fun TvAlbumTrackRow(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
+            // combinedClickable listens for a pointer long press, which a D-pad never
+            // produces, so the remote's menu key is the context menu here.
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_MENU
+                ) {
+                    onLongClick()
+                    true
+                } else {
+                    false
+                }
+            }
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

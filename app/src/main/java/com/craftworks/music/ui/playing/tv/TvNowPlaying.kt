@@ -27,6 +27,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.focusGroup
@@ -57,7 +58,11 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -115,6 +120,7 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.craftworks.music.R
+import com.craftworks.music.data.model.SyncedWord
 import com.craftworks.music.data.model.id
 import com.craftworks.music.data.model.providerId
 import com.craftworks.music.data.repository.LyricsState
@@ -170,6 +176,7 @@ fun TvNowPlaying(
     var queueOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
     var shareOpen by remember { mutableStateOf(false) }
+    var trayOpen by remember { mutableStateOf(false) }
 
     val sheetAlbumId = metadata?.extras?.getString("albumId").orEmpty()
     val sheetSongId = metadata?.extras?.getString("id").orEmpty()
@@ -302,7 +309,26 @@ fun TvNowPlaying(
                     return@onKeyEvent true
                 }
 
-                if (barVisible && barOwnsFocus) return@onKeyEvent false
+                // The tray sits on top of the bar: Back or Down puts it away, and Up
+                // from the bar pulls it up, the way the tvOS player does.
+                if (trayOpen) {
+                    if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        trayOpen = false
+                        barVisible = true
+                        barFocusTicket++
+                        return@onKeyEvent true
+                    }
+                    return@onKeyEvent false
+                }
+
+                if (barVisible && barOwnsFocus) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                        trayOpen = true
+                        lastInteraction = System.nanoTime()
+                        return@onKeyEvent true
+                    }
+                    return@onKeyEvent false
+                }
 
                 when {
 
@@ -668,9 +694,16 @@ fun TvNowPlaying(
         }
 
         if (queueOpen)
-            TvQueueSheet(
+            TvQueueRail(
                 mediaController = mediaController,
-                onDismiss = { queueOpen = false }
+                colours = colours,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 128.dp),
+                onDismiss = {
+                    queueOpen = false
+                    barFocusTicket++
+                }
             )
 
         if (moreOpen)
@@ -702,9 +735,36 @@ fun TvNowPlaying(
                 }
             )
 
+        // The tray: artwork and the actions worth one press away.
+        AnimatedVisibility(
+            visible = trayOpen,
+            enter = fadeIn(tween(200)) + slideInVertically(
+                initialOffsetY = { it / 3 },
+                animationSpec = tween(260, easing = FastOutSlowInEasing)
+            ),
+            exit = fadeOut(tween(150)) + slideOutVertically(
+                targetOffsetY = { it / 3 },
+                animationSpec = tween(200, easing = FastOutSlowInEasing)
+            ),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+        ) {
+            TvPlayerTray(
+                metadata = metadata,
+                canShowLyrics = canShowLyrics,
+                onGoToAlbum = { trayOpen = false; onGoToAlbum() },
+                onGoToArtist = { trayOpen = false; onGoToArtist() },
+                onLyrics = { trayOpen = false; toggleLyrics() },
+                onShare = { trayOpen = false; shareOpen = true },
+                onSleepTimer = { trayOpen = false; sleepTimerOpen = true }
+            )
+        }
+
         // The bar only exists while the remote is in use
         AnimatedVisibility(
-            visible = barVisible && showAppleBar && !infoOpen,
+            // The tray takes the bar's place rather than stacking on top of it.
+            visible = barVisible && showAppleBar && !infoOpen && !trayOpen,
             enter = fadeIn(tween(durationMillis = 300)) + slideInVertically(
                 initialOffsetY = { it },
                 animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
@@ -1244,10 +1304,38 @@ private fun TvPlaybackProgress(
     }
 }
 
+/** One lyric line, with its words when the provider ships word timings. */
+private data class LyricRow(
+    val startMs: Int,
+    val text: String,
+    val words: List<SyncedWord>? = null
+) {
+    /**
+     * The line as it should be drawn now: where the provider ships word timings the
+     * sung words are lit and the rest stay back, otherwise the whole line is one run.
+     */
+    fun annotated(positionMs: Int, base: Color, lit: Color): AnnotatedString {
+        val timed = words
+        if (timed.isNullOrEmpty()) return AnnotatedString(text)
+
+        return buildAnnotatedString {
+            timed.forEachIndexed { index, word ->
+                withStyle(
+                    SpanStyle(color = if (positionMs >= word.startMs) lit else base)
+                ) {
+                    append(word.text)
+                    if (index < timed.lastIndex) append(' ')
+                }
+            }
+        }
+    }
+}
+
 /**
- * tvOS-style lyrics: the lines themselves are the interface, big and rounded over
- * the drifting artwork, the sung line fully lit and the rest faded back, with the
- * three sheet dots showing where in the song the reader is.
+ * tvOS-style lyrics: the lines themselves are the interface, big and rounded over the
+ * drifting artwork, the sung line fully lit and the rest faded back. Every line is a
+ * seek target, the focused one shows its timestamp, and word-synced lyrics light up
+ * word by word as they are sung.
  */
 @Composable
 private fun TvLyricsPane(
@@ -1283,31 +1371,36 @@ private fun TvLyricsPane(
         }
     }
 
-    val lines = remember(lyrics, durationMs) {
+    val rows = remember(lyrics, durationMs) {
         val raw = lyrics.lines
-            .map { line -> line.startMs to line.lines.joinToString(" ") { it.text }.trim() }
-            .filter { it.second.isNotBlank() }
+            .map { line ->
+                LyricRow(
+                    startMs = line.startMs,
+                    text = line.lines.joinToString(" ") { it.text }.trim(),
+                    words = line.lines.flatMap { it.words.orEmpty() }.takeIf { it.isNotEmpty() }
+                )
+            }
+            .filter { it.text.isNotBlank() }
 
-        // Plain lyrics carry no timestamps at all, so every line would sit on 0 and
-        // the pane would never move. Spread them over the track instead: the last
-        // line lands at the end of the song and the reader advances with playback.
-        // startMs is an Int, so the spread stays an Int too: mixing Long and Int here
-        // made the two branches meet at Pair<Number & Comparable<*>, String>, which
-        // cannot be compared afterwards.
-        if (raw.any { it.first > 0 } || durationMs <= 0L || raw.isEmpty()) {
+        // Plain lyrics carry no timestamps at all, so every line would sit on 0 and the
+        // pane would never move. Spread them over the track instead: the last line lands
+        // at the end of the song and the reader advances with playback. startMs is an
+        // Int, so the spread stays an Int too.
+        if (raw.any { it.startMs > 0 } || durationMs <= 0L || raw.isEmpty()) {
             raw
         } else {
-            raw.mapIndexed { index, line ->
-                (durationMs * index / raw.size).toInt() to line.second
+            raw.mapIndexed { index, row ->
+                row.copy(startMs = (durationMs * index / raw.size).toInt())
             }
         }
     }
 
-    if (lines.isEmpty()) return
+    if (rows.isEmpty()) return
 
-    val activeIndex = remember(positionMs, lines) {
-        lines.indexOfLast { it.first <= positionMs }.coerceAtLeast(0)
+    val activeIndex = remember(positionMs, rows) {
+        rows.indexOfLast { it.startMs <= positionMs }.coerceAtLeast(0)
     }
+    var focusedIndex by remember { mutableIntStateOf(-1) }
 
     val listState = rememberLazyListState()
     LaunchedEffect(activeIndex, autoScroll, recenter) {
@@ -1330,110 +1423,244 @@ private fun TvLyricsPane(
     BoxWithConstraints(modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .focusGroup(),
             contentPadding = PaddingValues(vertical = maxHeight * 0.36f),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            itemsIndexed(lines) { index, line ->
+            itemsIndexed(rows) { index, row ->
                 val emphasis by animateFloatAsState(
                     targetValue = if (index == activeIndex) 1f else 0f,
                     animationSpec = emphasisSpec,
                     label = "line emphasis"
                 )
 
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = row.annotated(
+                            positionMs = positionMs,
+                            base = tint.copy(alpha = 0.45f),
+                            lit = tint
+                        ),
+                        fontSize = size * (0.86f + 0.14f * emphasis),
+                        fontWeight = if (index == activeIndex) FontWeight.Bold else FontWeight.Medium,
+                        fontFamily = FontFamily.SansSerif,
+                        lineHeight = size * 1.16f,
+                        textAlign = textAlign,
+                        color = tint.copy(alpha = 0.40f + 0.60f * emphasis),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            // A line is a seek target: press it and the song jumps there.
+                            .clickable { mediaController?.seekTo(row.startMs.toLong()) }
+                            .onFocusChanged { if (it.isFocused) focusedIndex = index }
+                            .padding(vertical = 2.dp)
+                    )
+
+                    if (focusedIndex == index) {
+                        Text(
+                            text = StringUtils.formatSeconds(row.startMs / 1000),
+                            fontSize = TvType.callout.fontSize,
+                            fontWeight = FontWeight.SemiBold,
+                            color = tint,
+                            modifier = Modifier
+                                .padding(start = 12.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.Black.copy(alpha = 0.35f))
+                                .padding(horizontal = 10.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The centred Up Next rail: the next covers in a row above the bar, the way the tvOS
+ * player shows what is coming instead of taking over the screen with a list.
+ */
+@Composable
+private fun TvQueueRail(
+    mediaController: MediaController?,
+    colours: ArtworkColours,
+    modifier: Modifier = Modifier,
+    onDismiss: () -> Unit
+) {
+    val count = mediaController?.mediaItemCount ?: 0
+    val current = mediaController?.currentMediaItemIndex ?: 0
+    val first = remember { FocusRequester() }
+
+    val upcoming = remember(mediaController, count, current) {
+        (current + 1 until minOf(count, current + 11)).mapNotNull { index ->
+            mediaController?.getMediaItemAt(index)?.let { index to it }
+        }
+    }
+
+    LaunchedEffect(upcoming.firstOrNull()?.first) {
+        runCatching { first.requestFocus() }
+    }
+
+    if (upcoming.isEmpty()) return
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .liquidGlass(RoundedCornerShape(20.dp), base = colours.base.copy(alpha = 0.92f))
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        upcoming.forEachIndexed { position, entry ->
+            val (index, item) = entry
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(104.dp)
+            ) {
+                Button(
+                    onClick = {
+                        mediaController?.seekToDefaultPosition(index)
+                        mediaController?.play()
+                        onDismiss()
+                    },
+                    modifier = Modifier
+                        .then(if (position == 0) Modifier.focusRequester(first) else Modifier)
+                        .size(104.dp),
+                    shape = ButtonDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                    contentPadding = PaddingValues(0.dp),
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color.Transparent,
+                        focusedContainerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        focusedContentColor = Color.White
+                    )
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(item.mediaMetadata.artworkUri)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        fallback = painterResource(R.drawable.placeholder),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                }
+
                 Text(
-                    text = line.second,
-                    fontSize = size * (0.86f + 0.14f * emphasis),
-                    fontWeight = if (index == activeIndex) FontWeight.Bold else FontWeight.Medium,
-                    fontFamily = FontFamily.SansSerif,
-                    lineHeight = size * 1.16f,
-                    textAlign = textAlign,
-                    color = tint.copy(alpha = 0.40f + 0.60f * emphasis),
-                    modifier = Modifier.fillMaxWidth()
+                    text = item.mediaMetadata.title?.toString().orEmpty(),
+                    fontSize = TvType.footnote.fontSize,
+                    color = Color.White.copy(alpha = 0.9f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 6.dp)
                 )
             }
         }
     }
 }
 
-/** Apple's queue: everything after the current song, with the current row marked. */
+/** The tvOS tray: pulled up from the bar, holding the work worth one press. */
 @Composable
-private fun TvQueueSheet(
-    mediaController: MediaController?,
-    onDismiss: () -> Unit
+private fun TvPlayerTray(
+    metadata: MediaMetadata?,
+    canShowLyrics: Boolean,
+    onGoToAlbum: () -> Unit,
+    onGoToArtist: () -> Unit,
+    onLyrics: () -> Unit,
+    onShare: () -> Unit,
+    onSleepTimer: () -> Unit
 ) {
-    val count = mediaController?.mediaItemCount ?: 0
-    val current = mediaController?.currentMediaItemIndex ?: 0
-    val currentFocus = remember { FocusRequester() }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
 
-    LaunchedEffect(count) { runCatching { currentFocus.requestFocus() } }
+    val albumId = metadata?.extras?.getString("albumId").orEmpty()
+    val artistId = metadata?.extras?.getString("artistId").orEmpty()
+    val sheetShape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
 
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .width(480.dp)
-                .heightIn(max = 396.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .liquidGlass(RoundedCornerShape(20.dp))
-                .padding(vertical = 16.dp)
-        ) {
-            Text(
-                text = "Up Next",
-                color = Color.White,
-                fontSize = TvType.headline.fontSize,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 20.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(sheetShape)
+            .liquidGlass(sheetShape, base = Color(0xFF141416))
+            .padding(horizontal = 56.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(metadata?.artworkUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                fallback = painterResource(R.drawable.placeholder),
+                modifier = Modifier
+                    .size(88.dp)
+                    .clip(RoundedCornerShape(8.dp))
             )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(top = 10.dp, bottom = 4.dp)
-            ) {
-                for (index in 0 until count) {
-                    val item = mediaController?.getMediaItemAt(index) ?: continue
-                    val isCurrent = index == current
+            Spacer(Modifier.width(20.dp))
 
-                    Button(
-                        onClick = {
-                            mediaController.seekToDefaultPosition(index)
-                            mediaController.play()
-                            onDismiss()
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 2.dp)
-                            .then(if (isCurrent) Modifier.focusRequester(currentFocus) else Modifier),
-                        shape = ButtonDefaults.shape(shape = RoundedCornerShape(12.dp)),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                        colors = ButtonDefaults.colors(
-                            containerColor = Color.White.copy(alpha = if (isCurrent) 0.16f else 0.04f),
-                            focusedContainerColor = Color.White,
-                            contentColor = Color.White,
-                            focusedContentColor = Color.Black
-                        )
-                    ) {
-                        Column(Modifier.fillMaxWidth()) {
-                            Text(
-                                text = item.mediaMetadata.title?.toString().orEmpty(),
-                                fontSize = TvType.body.fontSize,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = item.mediaMetadata.artist?.toString().orEmpty(),
-                                fontSize = TvType.callout.fontSize,
-                                color = androidx.compose.material3.LocalContentColor.current.copy(alpha = 0.66f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = metadata?.title?.toString().orEmpty(),
+                    fontSize = TvType.title3.fontSize,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = metadata?.artist?.toString().orEmpty(),
+                    fontSize = TvType.body.fontSize,
+                    color = Color.White.copy(alpha = 0.74f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (albumId.isNotBlank())
+                TrayAction("Go to Album", first, onGoToAlbum)
+            if (artistId.isNotBlank())
+                TrayAction("Go to Artist", null, onGoToArtist)
+            if (canShowLyrics)
+                TrayAction("Lyrics", null, onLyrics)
+            TrayAction("Share", null, onShare)
+            TrayAction("Sleep Timer", null, onSleepTimer)
+        }
+    }
+}
+
+@Composable
+private fun TrayAction(
+    label: String,
+    focusRequester: FocusRequester?,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = (if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .heightIn(min = 44.dp)
+            .glassRim(RoundedCornerShape(10.dp), strength = 0.8f),
+        shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
+        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
+        colors = ButtonDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.12f),
+            disabledContainerColor = Color.White.copy(alpha = 0.08f),
+            contentColor = Color.White,
+            disabledContentColor = Color.White.copy(alpha = 0.3f),
+            focusedContainerColor = Color.White,
+            focusedContentColor = Color.Black
+        )
+    ) {
+        Text(text = label, fontSize = TvType.body.fontSize, fontWeight = FontWeight.Medium)
     }
 }
 

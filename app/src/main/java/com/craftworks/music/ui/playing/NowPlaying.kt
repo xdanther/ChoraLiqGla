@@ -113,6 +113,15 @@ fun NowPlayingContent(
                         Screen.AlbumDetails(albumId, metadata?.artworkUri?.toString().orEmpty())
                     ) { launchSingleTop = true }
                 }
+            },
+            onGoToArtist = {
+                val artistId = metadata?.extras?.getString("artistId")
+                if (!artistId.isNullOrBlank()) {
+                    onHide()
+                    navHostController.navigate(
+                        Screen.ArtistDetails(artistId, metadata?.artworkUri?.toString())
+                    ) { launchSingleTop = true }
+                }
             }
         )
     } else if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
