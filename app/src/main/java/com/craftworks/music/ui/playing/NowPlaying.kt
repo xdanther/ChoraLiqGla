@@ -68,7 +68,11 @@ fun NowPlayingContent(
         ?.collectAsStateWithLifecycle(initialValue = 0)
         ?: remember { mutableIntStateOf(0) }
     val colors by viewModel.paletteColors.collectAsStateWithLifecycle()
+    val artworkColours by viewModel.artworkColours.collectAsStateWithLifecycle()
     val iconTextColor by viewModel.iconTextColor.collectAsStateWithLifecycle()
+
+    val isTv = LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK ==
+        Configuration.UI_MODE_TYPE_TELEVISION
 
     val isSystemDark = if (oledProtectionMode != OLEDProtectionMode.OFF) true
         else isSystemInDarkTheme()
@@ -85,14 +89,18 @@ fun NowPlayingContent(
         else -> Color.Transparent
     }
 
-    NowPlaying_Background(colors, backgroundStyle, targetOverlayColor)
+    // The TV player paints its own artwork wash, so drawing the shared background too
+    // stacked a second, darker field underneath it.
+    if (!(isTv && backgroundStyle == NowPlayingBackground.DRIFTING_BLUR))
+        NowPlaying_Background(colors, backgroundStyle, targetOverlayColor)
 
-    if (LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION) {
+    if (isTv) {
         TvNowPlaying(
             mediaController,
             iconTextColor,
             metadata,
             palette = colors,
+            colours = artworkColours,
             onDownload = { metadata?.let { viewModel.downloadSong(it) } },
             onRefreshLyrics = { viewModel.refreshLyrics(metadata) },
             onGoToAlbum = {

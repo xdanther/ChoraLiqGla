@@ -2,18 +2,11 @@ package com.craftworks.music.ui.playing
 
 import android.content.Context
 import android.net.Uri
-import android.os.Build
-import android.util.Log
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import androidx.palette.graphics.Palette
 import coil3.imageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
@@ -68,6 +61,10 @@ class NowPlayingViewModel @Inject constructor (
     private val _paletteColors = MutableStateFlow<List<Color>>(emptyList())
     val paletteColors = _paletteColors.asStateFlow()
 
+    /** The single colour model every now playing surface reads from. */
+    private val _artworkColours = MutableStateFlow(ArtworkColours.default(true))
+    val artworkColours = _artworkColours.asStateFlow()
+
     private val _iconTextColor = MutableStateFlow<Color>(Color.White)
     val iconTextColor = _iconTextColor.asStateFlow()
 
@@ -92,40 +89,28 @@ class NowPlayingViewModel @Inject constructor (
     fun updatePaletteFromUri(uri: Uri?, currentBackgroundStyle: NowPlayingBackground, isSystemDark: Boolean) {
         if (currentBackgroundStyle == NowPlayingBackground.PLAIN) {
             _paletteColors.value = emptyList()
+            val colours = ArtworkColours.default(isSystemDark)
+            _artworkColours.value = colours
             _isBackgroundDark.value = isSystemDark
-            _iconTextColor.value = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (_isBackgroundDark.value) dynamicDarkColorScheme(context).onBackground
-                else dynamicLightColorScheme(context).onBackground
-            } else {
-                if (_isBackgroundDark.value) Color.White
-                else Color.Black
-            }
-
+            _iconTextColor.value = colours.inkPrimary
             return
         }
 
-        if (uri == null) return
-
         viewModelScope.launch {
-            val palette = extractColorsFromUri(uri.toString(), context)
-            val extractedColors = palette.filterNotNull()
-            _paletteColors.value = extractedColors
+            val colours = uri?.let { extractColoursFromUri(it.toString(), context) }
+                ?: ArtworkColours.default(isSystemDark)
 
-            val averageLuminance = extractedColors.map { ColorUtils.calculateLuminance(it.toArgb()) }.average()
-            _isBackgroundDark.value = averageLuminance <= 0.5f
-
-            _iconTextColor.value = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (_isBackgroundDark.value) dynamicDarkColorScheme(context).onBackground
-                else dynamicLightColorScheme(context).onBackground
-            } else {
-                if (_isBackgroundDark.value) Color.White
-                else Color.Black
-            }
+            _artworkColours.value = colours
+            // Base first: the shared backgrounds draw in the order they are given.
+            _paletteColors.value = listOf(colours.base, colours.accentA, colours.accentB)
+            _isBackgroundDark.value = colours.isDark
+            // Ink is computed from the artwork against the field colour, so labels are
+            // real white (or real black) instead of a tinted system onBackground.
+            _iconTextColor.value = colours.inkPrimary
         }
     }
 
-    private suspend fun extractColorsFromUri(uri: String, context: Context): List<Color?> = coroutineScope {
-        val loader = context.imageLoader
+    private suspend fun extractColoursFromUri(uri: String, context: Context): ArtworkColours? = coroutineScope {
         val request = ImageRequest.Builder(context)
             .data(uri)
             .allowHardware(false)
@@ -133,40 +118,11 @@ class NowPlayingViewModel @Inject constructor (
             .memoryCachePolicy(CachePolicy.DISABLED)
             .build()
 
-        val result = (loader.execute(request) as? SuccessResult)?.image
-        val bitmap = result?.toBitmap()
+        val bitmap = (context.imageLoader.execute(request) as? SuccessResult)?.image?.toBitmap()
 
-        bitmap?.let { bitmapImage ->
-            withContext(Dispatchers.Default) {
-                val palette = Palette.Builder(bitmapImage).generate()
-
-                val swatches = mapOf(
-                    "Muted" to palette.mutedSwatch,
-                    "Dark Vibrant" to palette.darkVibrantSwatch,
-                    "Light Vibrant" to palette.lightVibrantSwatch,
-                    "Vibrant" to palette.vibrantSwatch,
-                    "Dominant" to palette.dominantSwatch,
-                    "Light Muted" to palette.lightMutedSwatch
-                )
-
-                // Log the results
-                swatches.forEach { (name, swatch) ->
-                    swatch?.let {
-                        val hex = Integer.toHexString(it.rgb).uppercase()
-                        Log.d("PaletteColor", "$name: #$hex | Body Text Color: ${Integer.toHexString(it.bodyTextColor)}")
-                    }
-                }
-
-                listOf(
-                    palette.vibrantSwatch?.rgb?.let { Color(it) },
-                    palette.darkVibrantSwatch?.rgb?.let { Color(it) },
-                    palette.dominantSwatch?.rgb?.let { Color(it) },
-                    palette.lightVibrantSwatch?.rgb?.let { Color(it) },
-                    palette.mutedSwatch?.rgb?.let { Color(it) },
-                    palette.lightMutedSwatch?.rgb?.let { Color(it) },
-                )
-            }
-        } ?: listOf()
+        bitmap?.let { artwork ->
+            withContext(Dispatchers.Default) { ArtworkPalette.extract(artwork) }
+        }
     }
 
     fun downloadSong(metadata: MediaMetadata) {

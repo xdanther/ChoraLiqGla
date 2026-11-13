@@ -9,6 +9,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.snap
+import com.craftworks.music.ui.playing.ArtworkColours
 import com.craftworks.music.ui.playing.NowPlayingAlignment
 import com.craftworks.music.ui.playing.NowPlayingBackground
 import androidx.compose.animation.core.LinearEasing
@@ -144,6 +145,7 @@ fun TvNowPlaying(
     iconColor: Color = Color.Black,
     metadata: MediaMetadata? = null,
     palette: List<Color> = emptyList(),
+    colours: ArtworkColours = ArtworkColours.default(true),
     onGoToAlbum: () -> Unit = {},
     onGoToArtist: () -> Unit = {},
     onDownload: () -> Unit = {},
@@ -273,9 +275,10 @@ fun TvNowPlaying(
         modifier = Modifier
             .fillMaxSize()
             // The plain, static and animated styles are drawn by NowPlaying_Background;
-            // only the drifting style needs an opaque base here.
+            // only the drifting style paints here, from the artwork's own base colour so
+            // the first frame never flashes black.
             .background(
-                if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR) Color.Black
+                if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR) colours.base
                 else Color.Transparent
             )
             .focusRequester(pageFocus)
@@ -455,7 +458,7 @@ fun TvNowPlaying(
                             // for the player's own screen.
                             LyricsBackdrop(metadata)
                         } else {
-                            PaletteWash(palette)
+                            ArtworkWash(colours)
                         }
 
                     if (sideBySideLyrics) {
@@ -505,7 +508,7 @@ fun TvNowPlaying(
                                     Text(
                                         text = metadata?.artist?.toString().orEmpty(),
                                         fontSize = 15.sp,
-                                        color = iconTextColor.copy(alpha = 0.62f),
+                                        color = iconTextColor.copy(alpha = 0.74f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -562,7 +565,7 @@ fun TvNowPlaying(
                                     ?: metadata?.artist?.toString().orEmpty(),
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = iconTextColor.copy(alpha = 0.62f),
+                                color = iconTextColor.copy(alpha = 0.74f),
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -598,7 +601,7 @@ fun TvNowPlaying(
                             Text(
                                 text = metadata?.artist?.toString().orEmpty(),
                                 fontSize = 15.sp,
-                                color = iconTextColor.copy(alpha = 0.60f),
+                                color = iconTextColor.copy(alpha = 0.74f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -650,12 +653,12 @@ fun TvNowPlaying(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(240.dp)
+                    .height(200.dp)
                     .background(
                         Brush.verticalGradient(
                             0f to Color.Transparent,
-                            0.45f to Color.Black.copy(alpha = 0.35f),
-                            1f to Color.Black.copy(alpha = 0.75f)
+                            0.5f to Color.Black.copy(alpha = 0.18f),
+                            1f to Color.Black.copy(alpha = 0.45f)
                         )
                     )
             )
@@ -1913,42 +1916,56 @@ private fun LyricsBackdrop(metadata: MediaMetadata?) {
 }
 
 /**
- * Apple's player background is a field of colour taken from the artwork, not the
- * artwork itself: a few large, soft blobs of its most saturated colours drifting
- * slowly while each one morphs into the next colour. No part of the cover is drawn,
- * so no edges or detail can show through the wash.
+ * tvOS 27's now playing background is a field of colour taken from the artwork, not the
+ * artwork itself: a few large, soft blobs of the cover's own hues drifting while each
+ * one morphs into the next. Since 27.2 the motion is quicker than it used to be.
+ *
+ * The base is the cover's dominant hue at a mid-dark OKLCH lightness, so the field is
+ * colourful instead of black, and every blob is brighter than that base, so a pastel
+ * cover can no longer produce a pastel screen.
  */
 @Composable
-private fun PaletteWash(palette: List<Color>) {
-    val seeds = remember(palette) { washSeeds(palette) }
-
-    val transition = rememberInfiniteTransition(label = "palette wash")
+private fun ArtworkWash(colours: ArtworkColours) {
+    val transition = rememberInfiniteTransition(label = "artwork wash")
     val drift by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(28_000, easing = LinearEasing)),
+        animationSpec = infiniteRepeatable(tween(14_000, easing = LinearEasing)),
         label = "wash drift"
     )
     val breathe by transition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(tween(19_000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        initialValue = 0.96f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(16_000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "wash breathe"
     )
 
     Canvas(Modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
+        val reach = maxOf(width, height)
 
         drawRect(
             brush = Brush.linearGradient(
-                colors = listOf(seeds.base, seeds.base.copy(alpha = 0.78f), seeds.base),
+                colors = listOf(
+                    colours.base,
+                    lerp(colours.base, colours.accentB, 0.45f),
+                    colours.base
+                ),
                 start = Offset(0f, 0f),
                 end = Offset(width, height)
             )
         )
 
-        seeds.blobs.forEach { blob ->
+        // Every blob is larger than the screen, so colour reaches the corners instead of
+        // fading out over the base and leaving the frame dark.
+        val blobs = listOf(
+            WashBlob(colours.accentA, colours.highlight, orbitX = 0.22f, orbitY = 0.11f, phase = 0f, radius = 0.92f, speed = 1f),
+            WashBlob(colours.accentB, colours.accentA, orbitX = 0.28f, orbitY = 0.15f, phase = 0.37f, radius = 0.78f, speed = 0.62f),
+            WashBlob(colours.highlight, colours.base, orbitX = 0.32f, orbitY = 0.17f, phase = 0.71f, radius = 0.66f, speed = 0.45f)
+        )
+
+        blobs.forEach { blob ->
             val cycle = (drift * blob.speed + blob.phase) % 1f
             val angle = cycle * 2f * Math.PI.toFloat()
 
@@ -1956,14 +1973,18 @@ private fun PaletteWash(palette: List<Color>) {
                 x = width * (0.5f + blob.orbitX * cos(angle)),
                 y = height * (0.5f + blob.orbitY * sin(angle))
             )
-            val radius = maxOf(width, height) * blob.radius * breathe
+            val radius = reach * blob.radius * breathe
 
             val mix = 0.5f + 0.5f * sin(angle + blob.phase)
             val color = lerp(blob.from, blob.to, mix)
 
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(color.copy(alpha = 0.85f), color.copy(alpha = 0.26f), Color.Transparent),
+                    colors = listOf(
+                        color.copy(alpha = 0.72f),
+                        color.copy(alpha = 0.42f),
+                        Color.Transparent
+                    ),
                     center = center,
                     radius = radius
                 ),
@@ -1972,12 +1993,13 @@ private fun PaletteWash(palette: List<Color>) {
             )
         }
 
-        // Keep the labels at the top and the bar at the bottom legible on any palette
+        // Only the bottom needs help, because the bar sits on it. The labels at the top
+        // are white on a mid-lightness base and need no scrim at all.
         drawRect(
             brush = Brush.verticalGradient(
-                0f to Color.Black.copy(alpha = 0.30f),
-                0.42f to Color.Transparent,
-                1f to Color.Black.copy(alpha = 0.42f)
+                0.55f to Color.Transparent,
+                0.82f to Color.Black.copy(alpha = 0.18f),
+                1f to Color.Black.copy(alpha = 0.40f)
             )
         )
     }
@@ -1992,36 +2014,3 @@ private class WashBlob(
     val radius: Float,
     val speed: Float
 )
-
-private class WashSeeds(val base: Color, val blobs: List<WashBlob>)
-
-private fun washSeeds(palette: List<Color>): WashSeeds {
-    val usable = palette.filter { it.alpha > 0.5f }
-    val source = if (usable.size >= 2) usable else listOf(
-        Color(0xFF7A2E1E),
-        Color(0xFF3A1F52),
-        Color(0xFF14364A)
-    )
-
-    fun boost(color: Color, saturation: Float, value: Float): Color {
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(color.toArgb(), hsv)
-        hsv[1] = (hsv[1] * saturation).coerceIn(0f, 1f)
-        hsv[2] = (hsv[2] * value).coerceIn(0.10f, 0.95f)
-        return Color(android.graphics.Color.HSVToColor(hsv))
-    }
-
-    val colors = source.map { boost(it, saturation = 1.6f, value = 0.95f) }
-    val base = boost(source.first(), saturation = 1.3f, value = 0.28f)
-
-    fun at(index: Int) = colors[index % colors.size]
-
-    return WashSeeds(
-        base = base,
-        blobs = listOf(
-            WashBlob(at(0), at(3), orbitX = 0.20f, orbitY = 0.10f, phase = 0.0f, radius = 0.52f, speed = 1.0f),
-            WashBlob(at(1), at(4), orbitX = 0.26f, orbitY = 0.14f, phase = 0.37f, radius = 0.44f, speed = 0.62f),
-            WashBlob(at(2), at(5), orbitX = 0.30f, orbitY = 0.16f, phase = 0.71f, radius = 0.38f, speed = 0.45f)
-        )
-    )
-}
