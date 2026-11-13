@@ -964,7 +964,6 @@ private fun ApplePlayerBar(
                     contentDescription = "Lyrics",
                     active = lyricsOpen,
                     modifier = Modifier.focusProperties {
-                        down = pageFocus
                         up = progressFocus
                     },
                     onClick = onToggleLyrics
