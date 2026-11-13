@@ -205,23 +205,42 @@ class AppearanceSettingsManager @Inject constructor(
         return result
     }
 
+    /** The destinations the app ships with, in their shipped order. */
+    private fun canonicalNavItems(): List<BottomNavItem> = listOf(
+        BottomNavItem(context.getString(R.string.nav_home), R.drawable.rounded_home_24, Screen.Home),
+        BottomNavItem(context.getString(R.string.nav_albums), R.drawable.rounded_library_music_24, Screen.Albums),
+        BottomNavItem(context.getString(R.string.nav_songs), R.drawable.round_music_note_24, Screen.Songs),
+        BottomNavItem(context.getString(R.string.nav_artists), R.drawable.rounded_artist_24, Screen.Artists),
+        BottomNavItem(context.getString(R.string.nav_radios), R.drawable.rounded_radio, Screen.Radios),
+        BottomNavItem(context.getString(R.string.nav_playlists), R.drawable.placeholder, Screen.Playlists)
+    )
+
+    /**
+     * A saved menu stores its icons as resource ids, and resource ids are renumbered by
+     * every build. A list saved a few versions ago therefore points at whatever now
+     * occupies those numbers, and once a number falls off the end of the table,
+     * drawing the menu throws [android.content.res.Resources.NotFoundException] and
+     * takes the app with it. Resolve each entry back to the icon its destination
+     * actually uses instead of trusting the stored number.
+     */
+    private fun List<BottomNavItem>.withCanonicalIcons(): List<BottomNavItem> {
+        val icons = (canonicalNavItems() + withTvEntries(emptyList()))
+            .associate { it.screenRoute to it.icon }
+        return map { item ->
+            item.copy(icon = icons[item.screenRoute] ?: R.drawable.rounded_home_24)
+        }
+    }
+
     val bottomNavItemsFlow: Flow<List<BottomNavItem>> = context.dataStore.data.map { preferences ->
         val jsonString = preferences[BOTTOM_NAV_ITEMS_KEY]
-        val defaultValue = listOf(
-            BottomNavItem(context.getString(R.string.nav_home), R.drawable.rounded_home_24, Screen.Home),
-            BottomNavItem(context.getString(R.string.nav_albums), R.drawable.rounded_library_music_24, Screen.Albums),
-            BottomNavItem(context.getString(R.string.nav_songs), R.drawable.round_music_note_24, Screen.Songs),
-            BottomNavItem(context.getString(R.string.nav_artists), R.drawable.rounded_artist_24, Screen.Artists),
-            BottomNavItem(context.getString(R.string.nav_radios), R.drawable.rounded_radio, Screen.Radios),
-            BottomNavItem(context.getString(R.string.nav_playlists), R.drawable.placeholder, Screen.Playlists)
-        )
+        val defaultValue = canonicalNavItems()
         val stored = try {
             jsonString?.let { Json.decodeFromString<List<BottomNavItem>>(it) } ?: defaultValue
         } catch (e: Exception) {
             println(e.message)
             defaultValue
         }
-        withTvEntries(stored)
+        withTvEntries(stored).withCanonicalIcons()
     }
 
     suspend fun setBottomNavItems(items: List<BottomNavItem>) {
