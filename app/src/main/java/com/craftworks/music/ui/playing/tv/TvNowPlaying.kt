@@ -1291,11 +1291,14 @@ private fun TvLyricsPane(
         // Plain lyrics carry no timestamps at all, so every line would sit on 0 and
         // the pane would never move. Spread them over the track instead: the last
         // line lands at the end of the song and the reader advances with playback.
-        if (raw.any { it.first > 0L } || durationMs <= 0L || raw.isEmpty()) {
+        // startMs is an Int, so the spread stays an Int too: mixing Long and Int here
+        // made the two branches meet at Pair<Number & Comparable<*>, String>, which
+        // cannot be compared afterwards.
+        if (raw.any { it.first > 0 } || durationMs <= 0L || raw.isEmpty()) {
             raw
         } else {
             raw.mapIndexed { index, line ->
-                (durationMs * index / raw.size) to line.second
+                (durationMs * index / raw.size).toInt() to line.second
             }
         }
     }
