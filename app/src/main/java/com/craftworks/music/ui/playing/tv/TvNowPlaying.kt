@@ -3,9 +3,6 @@
 package com.craftworks.music.ui.playing.tv
 
 import android.view.KeyEvent
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import android.os.Build
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -79,6 +76,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
@@ -147,6 +145,7 @@ fun TvNowPlaying(
     metadata: MediaMetadata? = null,
     palette: List<Color> = emptyList(),
     onGoToAlbum: () -> Unit = {},
+    onGoToArtist: () -> Unit = {},
     onDownload: () -> Unit = {},
     onRefreshLyrics: () -> Unit = {}
 ) {
@@ -186,6 +185,7 @@ fun TvNowPlaying(
     val barFocus = remember { FocusRequester() }
     val classicBarFocus = remember { FocusRequester() }
     var barFocusTicket by remember { mutableIntStateOf(0) }
+    var focusBarOnShow by remember { mutableStateOf(false) }
     var barOwnsFocus by remember { mutableStateOf(false) }
 
     // The bar is a visiting guest: it fades away again so the artwork stays the main thing.
@@ -200,8 +200,8 @@ fun TvNowPlaying(
     // The bar only exists once its enter animation has composed a node, so focus is
     // retried instead of asked for once: otherwise the bar appears but the page keeps
     // the remote and left/right seek instead of moving through its buttons.
-    LaunchedEffect(barVisible, showAppleBar) {
-        if (barVisible) {
+    LaunchedEffect(barVisible, showAppleBar, focusBarOnShow) {
+        if (barVisible && focusBarOnShow) {
             repeat(16) {
                 val got = if (showAppleBar) {
                     barFocus.requestFocusSafely()
@@ -259,8 +259,9 @@ fun TvNowPlaying(
         if (canShowLyrics) lyricsOpen = true
     }
 
-    fun revealBar() {
+    fun revealBar(focusBar: Boolean = false) {
         lastInteraction = System.nanoTime()
+        focusBarOnShow = focusBar
         barVisible = true
     }
 
@@ -291,6 +292,8 @@ fun TvNowPlaying(
                 when {
                     keyCode == KeyEvent.KEYCODE_BACK && infoOpen -> {
                         infoOpen = false
+                        barVisible = true
+                        barFocusTicket++
                         true
                     }
 
@@ -321,18 +324,18 @@ fun TvNowPlaying(
 
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                             mediaController.togglePlayback()
-                            revealBar()
+                            revealBar(focusBar = false)
                             true
                         }
 
                         // UP is the way into the bar: it comes up already selected
                         KeyEvent.KEYCODE_DPAD_UP -> {
-                            revealBar()
+                            revealBar(focusBar = true)
                             true
                         }
 
                         KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_MENU -> {
-                            revealBar()
+                            revealBar(focusBar = true)
                             true
                         }
 
@@ -369,7 +372,7 @@ fun TvNowPlaying(
 
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                             mediaController.togglePlayback()
-                            revealBar()
+                            revealBar(focusBar = false)
                             true
                         }
 
@@ -442,7 +445,14 @@ fun TvNowPlaying(
 
                     // A wash built from the cover's own colours, drifting slowly
                     if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR)
-                        PaletteWash(palette)
+                        if (lyricsOpen && appleLyrics) {
+                            // Over lyrics the blurred cover is wanted, exactly as the
+                            // shared background does it elsewhere; the colour wash is
+                            // for the player's own screen.
+                            LyricsBackdrop(metadata)
+                        } else {
+                            PaletteWash(palette)
+                        }
 
                     if (sideBySideLyrics) {
                         // Lyrics get the right half, the artwork keeps the left
@@ -590,15 +600,29 @@ fun TvNowPlaying(
 
                     AnimatedVisibility(
                         visible = infoOpen,
-                        enter = fadeIn(tween(200)),
-                        exit = fadeOut(tween(200)),
+                        enter = fadeIn(tween(200)) + slideInVertically(
+                            initialOffsetY = { it / 2 },
+                            animationSpec = tween(240, easing = FastOutSlowInEasing)
+                        ),
+                        exit = fadeOut(tween(180)) + slideOutVertically(
+                            targetOffsetY = { it / 2 },
+                            animationSpec = tween(200)
+                        ),
                         modifier = Modifier.align(Alignment.BottomCenter)
                     ) {
+                        // The card takes the bar's place, so the bar is not shown at all
+                        // while it is open and Back brings the bar back.
                         TrackInfoCard(
                             metadata = metadata,
                             color = iconTextColor,
                             onGoToAlbum = onGoToAlbum,
-                            modifier = Modifier.padding(start = 40.dp, end = 40.dp, bottom = 132.dp)
+                            onGoToArtist = { onGoToArtist() },
+                            onDismiss = {
+                                infoOpen = false
+                                barVisible = true
+                                barFocusTicket++
+                            },
+                            modifier = Modifier.padding(start = 40.dp, end = 40.dp, bottom = 24.dp)
                         )
                     }
                 }
@@ -665,7 +689,7 @@ fun TvNowPlaying(
 
         // The bar only exists while the remote is in use
         AnimatedVisibility(
-            visible = barVisible && showAppleBar,
+            visible = barVisible && showAppleBar && !infoOpen,
             enter = fadeIn(tween(durationMillis = 300)) + slideInVertically(
                 initialOffsetY = { it },
                 animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
@@ -690,7 +714,12 @@ fun TvNowPlaying(
                 infoOpen = infoOpen,
                 infoFocus = barFocus,
                 pageFocus = pageFocus,
-                onBarFocusChanged = { barOwnsFocus = it },
+                onBarFocusChanged = { hasFocus ->
+                    barOwnsFocus = hasFocus
+                    if (!hasFocus && !infoOpen && !queueOpen && !moreOpen && !shareOpen) {
+                        barVisible = false
+                    }
+                },
                 onDismiss = {
                     barVisible = false
                     barOwnsFocus = false
@@ -835,6 +864,8 @@ private fun ApplePlayerBar(
     onOpenMore: () -> Unit,
     onInteraction: () -> Unit
 ) {
+    val progressFocus = remember { FocusRequester() }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -842,9 +873,8 @@ private fun ApplePlayerBar(
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     onInteraction()
-                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
-                        keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK
-                    ) {
+                    // Only Back leaves the bar now: Up belongs to the scrubber above it
+                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
                         onDismiss()
                         return@onKeyEvent true
                     }
@@ -854,29 +884,38 @@ private fun ApplePlayerBar(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         if (!isRadio)
-            TvPlaybackProgress(mediaController = mediaController, color = color)
+            TvPlaybackProgress(
+                mediaController = mediaController,
+                color = color,
+                focusRequester = progressFocus,
+                onDown = { infoFocus.requestFocusSafely() },
+                onDismiss = onDismiss
+            )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val pillShade = if (color.luminance() > 0.5f) Color.White else Color.Black
+
             Button(
                 onClick = onToggleInfo,
                 modifier = Modifier
                     .focusRequester(infoFocus)
+                    .border(1.dp, pillShade.copy(alpha = 0.28f), CircleShape)
                     .focusProperties {
+                        up = progressFocus
                         down = pageFocus
-                        up = FocusRequester.Cancel
                     },
                 shape = ButtonDefaults.shape(shape = CircleShape),
                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
                 colors = ButtonDefaults.colors(
-                    containerColor = Color.White.copy(alpha = 0.18f),
-                    disabledContainerColor = Color.White.copy(alpha = 0.18f),
-                    contentColor = Color.White,
-                    disabledContentColor = Color.White.copy(alpha = 0.3f),
-                    focusedContainerColor = Color.White,
-                    focusedContentColor = Color.Black
+                    containerColor = pillShade.copy(alpha = 0.14f),
+                    disabledContainerColor = pillShade.copy(alpha = 0.10f),
+                    contentColor = color,
+                    disabledContentColor = color.copy(alpha = 0.3f),
+                    focusedContainerColor = pillShade.copy(alpha = 0.38f),
+                    focusedContentColor = color
                 )
             ) {
                 Text(text = "Info", fontSize = 13.sp, fontWeight = FontWeight.Medium)
@@ -886,6 +925,7 @@ private fun ApplePlayerBar(
 
             BarCircleButton(
                 icon = R.drawable.rounded_queue_music_24,
+                tint = color,
                 contentDescription = "Queue",
                 active = false,
                 modifier = Modifier
@@ -899,6 +939,7 @@ private fun ApplePlayerBar(
 
             BarCircleButton(
                 icon = R.drawable.rounded_more_horiz_24,
+                tint = color,
                 contentDescription = "More",
                 active = false,
                 modifier = Modifier
@@ -912,6 +953,7 @@ private fun ApplePlayerBar(
 
             if (canShowLyrics) {
                 BarCircleButton(
+                    tint = color,
                     icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
                     contentDescription = "Lyrics",
                     active = lyricsOpen,
@@ -931,21 +973,28 @@ private fun BarCircleButton(
     icon: Int,
     contentDescription: String,
     active: Boolean,
+    tint: Color,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    // Liquid glass: a translucent shade of the player's own ink inside a hairline
+    // outline, brightening rather than inverting when the remote lands on it.
+    val shade = if (tint.luminance() > 0.5f) Color.White else Color.Black
+
     Button(
         onClick = onClick,
-        modifier = modifier.size(38.dp),
+        modifier = modifier
+            .size(38.dp)
+            .border(1.dp, shade.copy(alpha = 0.28f), CircleShape),
         shape = ButtonDefaults.shape(shape = CircleShape),
         contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.14f),
-            disabledContainerColor = Color.White.copy(alpha = 0.14f),
-            contentColor = Color.White,
-            disabledContentColor = Color.White.copy(alpha = 0.3f),
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color.Black
+            containerColor = shade.copy(alpha = 0.14f),
+            disabledContainerColor = shade.copy(alpha = 0.10f),
+            contentColor = tint,
+            disabledContentColor = tint.copy(alpha = 0.3f),
+            focusedContainerColor = shade.copy(alpha = 0.38f),
+            focusedContentColor = tint
         )
     ) {
         Icon(
@@ -1071,8 +1120,12 @@ private fun PlayingIndicator(color: Color, mediaController: MediaController?) {
 private fun TvPlaybackProgress(
     mediaController: MediaController?,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    onDown: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null
 ) {
+    var focused by remember { mutableStateOf(false) }
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(false) }
@@ -1119,13 +1172,31 @@ private fun TvPlaybackProgress(
     } else 0f
     val remaining = (duration - position).coerceAtLeast(0L)
 
-    Column(modifier.fillMaxWidth()) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .then(
+                if (focusRequester != null) Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focused = it.isFocused }
+                    .focusable()
+                    .onKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                        when (event.nativeKeyEvent.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_DOWN -> { onDown?.invoke(); true }
+                            KeyEvent.KEYCODE_BACK -> { onDismiss?.invoke(); true }
+                            else -> false
+                        }
+                    }
+                else Modifier
+            )
+    ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(3.dp)
+                .height(if (focused) 5.dp else 3.dp)
                 .clip(CircleShape)
-                .background(color.copy(alpha = 0.22f))
+                .background(color.copy(alpha = if (focused) 0.38f else 0.22f))
         ) {
             Box(
                 Modifier
@@ -1631,10 +1702,19 @@ private fun TrackInfoCard(
     metadata: MediaMetadata?,
     color: Color,
     onGoToAlbum: () -> Unit = {},
+    onGoToArtist: () -> Unit = {},
+    onDismiss: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val ctaFocus = remember { FocusRequester() }
     val albumId = metadata?.extras?.getString("albumId").orEmpty()
+    val artistId = metadata?.extras?.getString("artistId").orEmpty()
+
+    // The card is opaque, so it takes the theme's surface colour and writes on it in
+    // the opposite ink instead of sitting on a translucent black slab.
+    val lightSurface = color.luminance() > 0.5f
+    val surface = if (lightSurface) Color.White else Color.Black
+    val content = if (lightSurface) Color.Black else Color.White
     val durationMs = metadata?.durationMs ?: 0L
     val minutes = durationMs / 60_000L
     val seconds = (durationMs % 60_000L) / 1000L
@@ -1652,7 +1732,18 @@ private fun TrackInfoCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.Black.copy(alpha = 0.34f))
+            .background(surface)
+            .focusGroup()
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK
+                ) {
+                    onDismiss()
+                    true
+                } else {
+                    false
+                }
+            }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1679,7 +1770,7 @@ private fun TrackInfoCard(
                 text = metadata?.title?.toString().orEmpty(),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = content,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1690,7 +1781,7 @@ private fun TrackInfoCard(
                     metadata?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
                 ).joinToString(" – "),
                 fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.88f),
+                color = content.copy(alpha = 0.85f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1699,7 +1790,7 @@ private fun TrackInfoCard(
                 Text(
                     text = "$minutes min, $seconds secs",
                     fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.75f)
+                    color = content.copy(alpha = 0.7f)
                 )
 
             if (lossless)
@@ -1707,177 +1798,205 @@ private fun TrackInfoCard(
                     text = "◐  Lossless",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color.White,
+                    color = content,
                     modifier = Modifier
                         .padding(top = 2.dp)
                         .clip(RoundedCornerShape(50))
-                        .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(50))
+                        .border(1.dp, content.copy(alpha = 0.45f), RoundedCornerShape(50))
                         .padding(horizontal = 12.dp, vertical = 3.dp)
                 )
         }
 
         Spacer(Modifier.width(20.dp))
 
-        if (albumId.isNotBlank())
-            Button(
-                onClick = onGoToAlbum,
-                modifier = Modifier
-                    .focusRequester(ctaFocus)
-                    .focusProperties { up = FocusRequester.Cancel },
-                shape = ButtonDefaults.shape(shape = RoundedCornerShape(50)),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
-                colors = ButtonDefaults.colors(
-                    containerColor = Color(0xFFC8DDFF),
-                    disabledContainerColor = Color(0xFFC8DDFF),
-                    contentColor = Color.Black,
-                    disabledContentColor = Color.Black.copy(alpha = 0.4f),
-                    focusedContainerColor = Color.White,
-                    focusedContentColor = Color.Black
-                )
-            ) {
-                Text(text = "Go to Album", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            }
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            if (albumId.isNotBlank())
+                Button(
+                    onClick = onGoToAlbum,
+                    modifier = Modifier
+                        .focusRequester(ctaFocus)
+                        .focusProperties { up = FocusRequester.Cancel },
+                    shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                    contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp),
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color(0xFFC8DDFF),
+                        disabledContainerColor = Color(0xFFC8DDFF),
+                        contentColor = Color.Black,
+                        disabledContentColor = Color.Black.copy(alpha = 0.4f),
+                        focusedContainerColor = Color.White,
+                        focusedContentColor = Color.Black
+                    )
+                ) {
+                    Text(text = "Go to Album", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+
+            if (artistId.isNotBlank())
+                Button(
+                    onClick = onGoToArtist,
+                    shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                    contentPadding = PaddingValues(horizontal = 22.dp, vertical = 6.dp),
+                    colors = ButtonDefaults.colors(
+                        containerColor = content.copy(alpha = 0.10f),
+                        disabledContainerColor = content.copy(alpha = 0.10f),
+                        contentColor = content,
+                        disabledContentColor = content.copy(alpha = 0.4f),
+                        focusedContainerColor = content,
+                        focusedContentColor = surface
+                    )
+                ) {
+                    Text(text = "Go to Artist", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+        }
     }
 }
 
-/**
- * The player background is a colour field computed on the GPU from the artwork's
- * palette: value noise is domain-warped by itself a couple of times, so the colours
- * bleed into each other in long liquid bands with no shape, edge or tiling to see.
- * Drawing gradients or circles into the canvas always left visible geometry; a
- * shader has no geometry at all.
- */
+/** The blurred cover behind the lyrics, so the pane frosts over the artwork. */
 @Composable
-private fun PaletteWash(palette: List<Color>) {
-    val colors = remember(palette) { washColors(palette) }
-
-    val transition = rememberInfiniteTransition(label = "palette wash")
-    val time by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 4000f,
-        animationSpec = infiniteRepeatable(tween(180_000, easing = LinearEasing)),
-        label = "wash time"
+private fun LyricsBackdrop(metadata: MediaMetadata?) {
+    val scale = rememberInfiniteTransition(label = "lyrics backdrop")
+    val drift by scale.animateFloat(
+        initialValue = 1.16f,
+        targetValue = 1.30f,
+        animationSpec = infiniteRepeatable(tween(30_000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "lyrics backdrop scale"
     )
 
-    // The runtime validates the program in its constructor, so a shader the device
-    // rejects degrades to the static gradient instead of taking the player down.
-    val shader = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            runCatching { android.graphics.RuntimeShader(WASH_SHADER) }.getOrNull()
-        } else {
-            null
-        }
-    }
-
-    if (shader != null) {
-        val paint = remember { android.graphics.Paint().apply { isAntiAlias = false } }
-
-        Canvas(Modifier.fillMaxSize()) {
-            shader.setFloatUniform("uResolution", size.width, size.height)
-            shader.setFloatUniform("uTime", time)
-            shader.setFloatUniform("uColorA", colors[0].red, colors[0].green, colors[0].blue)
-            shader.setFloatUniform("uColorB", colors[1].red, colors[1].green, colors[1].blue)
-            shader.setFloatUniform("uColorC", colors[2].red, colors[2].green, colors[2].blue)
-            shader.setFloatUniform("uColorD", colors[3].red, colors[3].green, colors[3].blue)
-
-            paint.shader = shader
-            drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawRect(0f, 0f, size.width, size.height, paint)
-            }
-        }
-    } else {
-        // Pre-Android 12: no runtime shaders, so two soft bands of the same colours
-        Box(
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(metadata?.artworkUri)
+                .crossfade(true)
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            fallback = null,
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(colors[0], colors[1], colors[2], colors[3]),
-                        start = Offset.Zero,
-                        end = Offset(1400f, 900f)
-                    )
-                )
+                .graphicsLayer { scaleX = drift; scaleY = drift }
+                .blur(70.dp)
+        )
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.42f))
         )
     }
 }
 
-private const val WASH_SHADER = """
-uniform float2 uResolution;
-uniform float uTime;
-uniform float3 uColorA;
-uniform float3 uColorB;
-uniform float3 uColorC;
-uniform float3 uColorD;
+/**
+ * Apple's player background is a field of colour taken from the artwork, not the
+ * artwork itself: a few large, soft blobs of its most saturated colours drifting
+ * slowly while each one morphs into the next colour. No part of the cover is drawn,
+ * so no edges or detail can show through the wash.
+ */
+@Composable
+private fun PaletteWash(palette: List<Color>) {
+    val seeds = remember(palette) { washSeeds(palette) }
 
-float hash21(float2 p) {
-    p = fract(p * float2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
-}
-
-float valueNoise(float2 p) {
-    float2 i = floor(p);
-    float2 f = fract(p);
-    float2 u = f * f * (3.0 - 2.0 * f);
-    float a = hash21(i);
-    float b = hash21(i + float2(1.0, 0.0));
-    float c = hash21(i + float2(0.0, 1.0));
-    float d = hash21(i + float2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
-float fbm(float2 p) {
-    float total = 0.0;
-    float amplitude = 0.5;
-    for (int i = 0; i < 4; i++) {
-        total += amplitude * valueNoise(p);
-        p *= 2.03;
-        amplitude *= 0.5;
-    }
-    return total;
-}
-
-half4 main(float2 fragCoord) {
-    float2 uv = fragCoord / uResolution;
-    float2 p = uv * 2.6;
-
-    float t = uTime * 0.012;
-    float2 warpA = float2(fbm(p + float2(0.0, t)), fbm(p + float2(4.7, -t)));
-    float2 warpB = float2(
-        fbm(p + 2.2 * warpA + float2(1.7, 9.2) + t * 0.55),
-        fbm(p + 2.2 * warpA + float2(8.3, 2.8) - t * 0.45)
-    );
-    float field = fbm(p + 1.8 * warpB);
-
-    float3 color = mix(uColorA, uColorB, smoothstep(0.16, 0.84, field));
-    color = mix(color, uColorC, smoothstep(0.28, 0.92, warpB.y));
-    color = mix(color, uColorD, smoothstep(0.42, 0.96, warpA.x));
-
-    float2 centered = uv - 0.5;
-    float vignette = 1.0 - dot(centered, centered) * 0.9;
-    color *= clamp(vignette, 0.52, 1.0);
-
-    return half4(color.r, color.g, color.b, 1.0);
-}
-"""
-
-private fun washColors(palette: List<Color>): List<Color> {
-    val usable = palette.filter { it.alpha > 0.5f }
-    val source = if (usable.size >= 2) usable else listOf(
-        Color(0xFF8A3524),
-        Color(0xFF43245C),
-        Color(0xFF16394F),
-        Color(0xFF5C2338)
+    val transition = rememberInfiniteTransition(label = "palette wash")
+    val drift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(28_000, easing = LinearEasing)),
+        label = "wash drift"
+    )
+    val breathe by transition.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(19_000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "wash breathe"
     )
 
-    fun boost(color: Color): Color {
+    Canvas(Modifier.fillMaxSize()) {
+        val width = size.width
+        val height = size.height
+
+        drawRect(
+            brush = Brush.linearGradient(
+                colors = listOf(seeds.base, seeds.base.copy(alpha = 0.78f), seeds.base),
+                start = Offset(0f, 0f),
+                end = Offset(width, height)
+            )
+        )
+
+        seeds.blobs.forEach { blob ->
+            val cycle = (drift * blob.speed + blob.phase) % 1f
+            val angle = cycle * 2f * Math.PI.toFloat()
+
+            val center = Offset(
+                x = width * (0.5f + blob.orbitX * cos(angle)),
+                y = height * (0.5f + blob.orbitY * sin(angle))
+            )
+            val radius = maxOf(width, height) * blob.radius * breathe
+
+            val mix = 0.5f + 0.5f * sin(angle + blob.phase)
+            val color = lerp(blob.from, blob.to, mix)
+
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(color.copy(alpha = 0.85f), color.copy(alpha = 0.26f), Color.Transparent),
+                    center = center,
+                    radius = radius
+                ),
+                radius = radius,
+                center = center
+            )
+        }
+
+        // Keep the labels at the top and the bar at the bottom legible on any palette
+        drawRect(
+            brush = Brush.verticalGradient(
+                0f to Color.Black.copy(alpha = 0.30f),
+                0.42f to Color.Transparent,
+                1f to Color.Black.copy(alpha = 0.42f)
+            )
+        )
+    }
+}
+
+private class WashBlob(
+    val from: Color,
+    val to: Color,
+    val orbitX: Float,
+    val orbitY: Float,
+    val phase: Float,
+    val radius: Float,
+    val speed: Float
+)
+
+private class WashSeeds(val base: Color, val blobs: List<WashBlob>)
+
+private fun washSeeds(palette: List<Color>): WashSeeds {
+    val usable = palette.filter { it.alpha > 0.5f }
+    val source = if (usable.size >= 2) usable else listOf(
+        Color(0xFF7A2E1E),
+        Color(0xFF3A1F52),
+        Color(0xFF14364A)
+    )
+
+    fun boost(color: Color, saturation: Float, value: Float): Color {
         val hsv = FloatArray(3)
         android.graphics.Color.colorToHSV(color.toArgb(), hsv)
-        hsv[1] = (hsv[1] * 1.7f).coerceIn(0f, 1f)
-        hsv[2] = (hsv[2] * 0.82f).coerceIn(0.14f, 0.72f)
+        hsv[1] = (hsv[1] * saturation).coerceIn(0f, 1f)
+        hsv[2] = (hsv[2] * value).coerceIn(0.10f, 0.95f)
         return Color(android.graphics.Color.HSVToColor(hsv))
     }
 
-    val boosted = source.map { boost(it) }
-    return List(4) { index -> boosted[index % boosted.size] }
+    val colors = source.map { boost(it, saturation = 1.6f, value = 0.95f) }
+    val base = boost(source.first(), saturation = 1.3f, value = 0.28f)
+
+    fun at(index: Int) = colors[index % colors.size]
+
+    return WashSeeds(
+        base = base,
+        blobs = listOf(
+            WashBlob(at(0), at(3), orbitX = 0.20f, orbitY = 0.10f, phase = 0.0f, radius = 0.52f, speed = 1.0f),
+            WashBlob(at(1), at(4), orbitX = 0.26f, orbitY = 0.14f, phase = 0.37f, radius = 0.44f, speed = 0.62f),
+            WashBlob(at(2), at(5), orbitX = 0.30f, orbitY = 0.16f, phase = 0.71f, radius = 0.38f, speed = 0.45f)
+        )
+    )
 }
