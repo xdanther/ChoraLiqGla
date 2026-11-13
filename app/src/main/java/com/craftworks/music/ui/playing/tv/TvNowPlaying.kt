@@ -336,17 +336,22 @@ fun TvNowPlaying(
                 // what left the remote stuck on the bar instead of moving through it.
                 // When nothing with buttons is showing the page takes the keys anyway,
                 // so losing focus can never leave the player deaf to the remote.
-                val controlsShowing = barVisible || infoOpen || queueOpen || moreOpen ||
-                    shareOpen || sleepTimerOpen
-                if (!pageFocused && controlsShowing) return@onKeyEvent false
-
-                // The info card replaces the bar, so Back belongs to it first
-                if (keyCode == KeyEvent.KEYCODE_BACK && infoOpen) {
+                // The info card is a sheet of its own: Back and Down put it away and
+                // touch nothing else, wherever the remote happens to be. This runs
+                // before the focus guard below so the press can never reach navigation
+                // and close the player instead.
+                if (infoOpen &&
+                    (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+                ) {
                     infoOpen = false
                     barVisible = true
                     barFocusTicket++
                     return@onKeyEvent true
                 }
+
+                val controlsShowing = barVisible || infoOpen || queueOpen || moreOpen ||
+                    shareOpen || sleepTimerOpen
+                if (!pageFocused && controlsShowing) return@onKeyEvent false
 
                 when {
                     keyCode == KeyEvent.KEYCODE_BACK && lyricsOpen -> {
@@ -1976,7 +1981,10 @@ private fun TrackInfoCard(
 
     LaunchedEffect(albumId, artistId) {
         if (albumId.isNotBlank() || artistId.isNotBlank()) {
-            runCatching { ctaFocus.requestFocus() }
+            repeat(10) {
+                if (runCatching { ctaFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                delay(40)
+            }
         }
     }
 
@@ -1987,14 +1995,14 @@ private fun TrackInfoCard(
             .liquidGlass(RoundedCornerShape(18.dp), base = surface)
             .focusGroup()
             .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK
-                ) {
-                    onDismiss()
-                    true
-                } else {
-                    false
+                if (event.type == KeyEventType.KeyDown) {
+                    val code = event.nativeKeyEvent.keyCode
+                    if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        onDismiss()
+                        return@onKeyEvent true
+                    }
                 }
+                false
             }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -2061,9 +2069,11 @@ private fun TrackInfoCard(
 
         Spacer(Modifier.width(20.dp))
 
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.End
+        // Side by side on purpose: Down closes the card, so the second button has to be
+        // reachable with the left and right keys instead.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             if (albumId.isNotBlank())
                 Button(
