@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -11,26 +12,26 @@ import kotlin.math.pow
 import kotlin.math.sin
 
 /**
- * One colour model for the whole now playing screen.
+ * The colour model every now playing surface reads from.
  *
  * Apple's MusicKit hands the app a `backgroundColor` and four contrast-checked text
  * colours per artwork instead of a bag of generic swatches, and the result never looks
- * washed out: one dominant hue carries the screen, the rest are its rotations, and the
- * text colour is chosen by contrast against that hue.
+ * washed out: one dominant hue carries the screen, and the text colour is chosen by
+ * contrast against it.
  *
- * AndroidX `Palette` gives us the opposite: six swatches that are allowed to be
- * "light muted", so a pastel cover produced a pastel background, and the text was a
- * tinted system `onBackground` instead of white. This replaces that with a single
- * computed model in OKLCH, where lightness and chroma are chosen deliberately.
+ * The field is always the artwork's own dominant hue. Companions are the artwork's
+ * *other* colours where it has them, and when it does not they are the same hue at a
+ * different lightness — never a rotated hue, which is what turned every warm cover
+ * orange in the previous version.
  */
 @Immutable
 data class ArtworkColours(
-    /** The field colour: the cover's dominant hue at a mid-dark OKLCH lightness. */
+    /** The field colour: the artwork's dominant hue at a mid-dark OKLCH lightness. */
     val base: Color,
-    /** Companions, rotated from [base]'s hue and kept at a usable chroma. */
+    /** Companions, taken from the artwork's other hues where it has them. */
     val accentA: Color,
     val accentB: Color,
-    /** A lighter version of the hue, used as a moving highlight. */
+    /** A lighter version of the dominant hue, used as a moving highlight. */
     val highlight: Color,
     /** Ink derived from [base]'s real luminance, never from the system theme. */
     val inkPrimary: Color,
@@ -70,17 +71,36 @@ data class ArtworkColours(
 /**
  * Extracts [ArtworkColours] from album art.
  *
- * The dominant hue is the chroma-weighted average CSS direction of every colourful
- * pixel, which is stable on covers with a few saturated elements and falls back to
- * neutral on greyscale art. Values are then chosen rather than inherited, so a pale
- * cover still gets a saturated field and a dark cover never collapses to black.
+ * Pixels are grouped into twelve OKLCH hue bins weighted by squared chroma, so large
+ * grey or black areas cannot vote. The heaviest bin is the field colour, and the next
+ * two *distinct* bins become the companions, which keeps a red cover red and a blue
+ * cover blue. Artwork with a single hue gets companions of that same hue at different
+ * lightness instead of invented colours.
  */
 object ArtworkPalette {
 
     private const val SAMPLE_SIZE = 48
 
-    /** Below this OKLCH chroma a pixel is treated as grey and ignored for the hue. */
-    private const val MIN_CHROMA = 0.012
+    /**
+     * Below this OKLCH chroma a pixel is treated as grey and ignored for the hue.
+     *
+     * The floor matters: at 0.012 the faint warm pixels in a black-and-white or
+     * near-grey cover (skin, sepia, wood) still voted, and since the field colour had a
+     * chroma floor of its own, every such cover came out orange. Only pixels that are
+     * genuinely coloured get a say now.
+     */
+    private const val MIN_CHROMA = 0.03
+
+    private const val HUE_BINS = 12
+
+    private class Cluster(
+        val hue: Double,
+        val chroma: Double,
+        val lightness: Double,
+        val weight: Double,
+        /** Share of the sampled artwork this hue actually covers, 0..1. */
+        val share: Float = 0f
+    )
 
     fun extract(bitmap: Bitmap): ArtworkColours {
         val sample = if (bitmap.width > SAMPLE_SIZE || bitmap.height > SAMPLE_SIZE) {
@@ -96,10 +116,13 @@ object ArtworkPalette {
         val pixels = IntArray(width * height)
         sample.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        var sumA = 0.0
-        var sumB = 0.0
-        var weightedLightness = 0.0
-        var weight = 0.0
+        val binA = DoubleArray(HUE_BINS)
+        val binB = DoubleArray(HUE_BINS)
+        val binChroma = DoubleArray(HUE_BINS)
+        val binLightness = DoubleArray(HUE_BINS)
+        val binWeight = DoubleArray(HUE_BINS)
+        val binCount = IntArray(HUE_BINS)
+        var totalWeight = 0.0
         var lightnessSum = 0.0
         var lightnessCount = 0
 
@@ -113,40 +136,93 @@ object ArtworkPalette {
 
             if (colour.c < MIN_CHROMA) continue
 
-            // Squaring the chroma lets one strong shape beat a large grey field.
+            // Squaring the chroma lets one strong shape beat a large muted field.
             val w = colour.c * colour.c
-            sumA += cos(colour.h) * w
-            sumB += sin(colour.h) * w
-            weightedLightness += colour.l * w
-            weight += w
+            val bin = (((colour.h + PI) / (2 * PI)) * HUE_BINS)
+                .toInt()
+                .coerceIn(0, HUE_BINS - 1)
+
+            binA[bin] += cos(colour.h) * w
+            binB[bin] += sin(colour.h) * w
+            binChroma[bin] += colour.c * w
+            binLightness[bin] += colour.l * w
+            binWeight[bin] += w
+            binCount[bin] += 1
+            totalWeight += w
         }
 
         val meanLightness = if (lightnessCount > 0) lightnessSum / lightnessCount else 0.5
 
         // Greyscale artwork: keep it neutral but still give it a body colour.
-        if (weight < 1e-6) {
-            val l = (0.30 + meanLightness * 0.12).coerceIn(0.30, 0.44)
-            return build(l, 0.0, 0.0)
+        if (totalWeight < 1e-6) {
+            val lightness = (0.32 + meanLightness * 0.10).coerceIn(0.30, 0.42)
+            return build(
+                Cluster(hue = 0.0, chroma = 0.0, lightness = lightness, weight = 0.0),
+                null,
+                null
+            )
         }
 
-        val hue = atan2(sumB, sumA)
-        val coherence = hypot(sumA, sumB) / weight
-        val artLightness = weightedLightness / weight
+        val clusters = (0 until HUE_BINS)
+            .filter { binWeight[it] > 0.0 }
+            .map { index ->
+                Cluster(
+                    hue = atan2(binB[index], binA[index]),
+                    chroma = binChroma[index] / binWeight[index],
+                    lightness = binLightness[index] / binWeight[index],
+                    weight = binWeight[index],
+                    share = binCount[index].toFloat() / lightnessCount.coerceAtLeast(1)
+                )
+            }
+            .sortedByDescending { it.weight }
 
-        // The field sits at light 0.40 wherever the art sits, drifting only slightly
-        // with the artwork so dark and bright covers still get a colourful base.
-        val baseL = (0.40 + (artLightness - 0.50) * 0.10).coerceIn(0.34, 0.44)
-        // A chroma floor is what stops pastel covers from producing pastel screens.
-        val baseC = (coherence * 1.15).coerceIn(0.055, 0.165)
+        // Neighbouring bins describe the same colour, so companions have to be a real
+        // distance away in hue before they count as the artwork's second colour.
+        val chosen = mutableListOf<Cluster>()
+        for (candidate in clusters) {
+            if (chosen.size == 3) break
+            if (chosen.all { hueDistance(it.hue, candidate.hue) > 0.45 }) chosen += candidate
+        }
 
-        return build(baseL, baseC, hue)
+        // If nothing is actually colourful, or the winning hue is only a logo-sized
+        // patch of an otherwise grey cover, stay neutral instead of tinting the whole
+        // screen with it.
+        if (chosen.first().chroma < MIN_CHROMA || chosen.first().share < 0.10f) {
+            return build(
+                Cluster(hue = 0.0, chroma = 0.0, lightness = meanLightness, weight = 0.0),
+                null,
+                null
+            )
+        }
+
+        return build(chosen.first(), chosen.getOrNull(1), chosen.getOrNull(2))
     }
 
-    private fun build(baseL: Double, baseC: Double, hue: Double): ArtworkColours {
-        val base = Oklch.toColor(baseL, baseC, hue)
-        val accentA = Oklch.toColor((baseL + 0.24).coerceAtMost(0.68), (baseC * 1.15).coerceIn(0.06, 0.19), hue + 0.55)
-        val accentB = Oklch.toColor((baseL + 0.12).coerceAtMost(0.60), (baseC * 1.00).coerceIn(0.055, 0.17), hue - 0.70)
-        val highlight = Oklch.toColor((baseL + 0.34).coerceAtMost(0.78), (baseC * 0.55).coerceIn(0.03, 0.12), hue + 0.12)
+    private fun build(primary: Cluster, second: Cluster?, third: Cluster?): ArtworkColours {
+        // Grey artwork keeps zero chroma: a floor here is what tinted greyscale covers.
+        val baseChroma = if (primary.chroma <= 0.0) 0.0 else primary.chroma.coerceIn(0.07, 0.14)
+
+        // The field drifts only a little with the artwork's own lightness: dark covers
+        // stay dark, but never collapse to black and never wash out.
+        val baseLightness = (0.38 + (primary.lightness - 0.5) * 0.06).coerceIn(0.34, 0.42)
+        val base = Oklch.toColor(baseLightness, baseChroma, primary.hue)
+
+        fun companionChroma(value: Double, min: Double, max: Double): Double =
+            if (baseChroma <= 0.0) 0.0 else value.coerceIn(min, max)
+
+        val accentA = second
+            ?.let { Oklch.toColor(0.54, companionChroma(it.chroma, 0.05, 0.13), it.hue) }
+            ?: Oklch.toColor(0.26, baseChroma * 0.90, primary.hue)
+
+        val accentB = third
+            ?.let { Oklch.toColor(0.46, companionChroma(it.chroma, 0.045, 0.12), it.hue) }
+            ?: Oklch.toColor(0.31, baseChroma * 0.95, primary.hue)
+
+        val highlight = Oklch.toColor(
+            (baseLightness + 0.28).coerceAtMost(0.66),
+            companionChroma(baseChroma * 0.5, 0.03, 0.08),
+            primary.hue
+        )
 
         val dark = base.luminance() < 0.5f
         val ink = if (dark) Color.White else Color.Black
@@ -161,6 +237,12 @@ object ArtworkPalette {
             inkTertiary = ink.copy(alpha = 0.56f),
             isDark = dark
         )
+    }
+
+    /** Shortest distance between two hues, in radians. */
+    private fun hueDistance(a: Double, b: Double): Double {
+        val raw = kotlin.math.abs(a - b) % (2 * PI)
+        return if (raw > PI) 2 * PI - raw else raw
     }
 }
 

@@ -176,7 +176,6 @@ fun TvNowPlaying(
     var queueOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
     var shareOpen by remember { mutableStateOf(false) }
-    var trayOpen by remember { mutableStateOf(false) }
 
     val sheetAlbumId = metadata?.extras?.getString("albumId").orEmpty()
     val sheetSongId = metadata?.extras?.getString("id").orEmpty()
@@ -309,26 +308,7 @@ fun TvNowPlaying(
                     return@onKeyEvent true
                 }
 
-                // The tray sits on top of the bar: Back or Down puts it away, and Up
-                // from the bar pulls it up, the way the tvOS player does.
-                if (trayOpen) {
-                    if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                        trayOpen = false
-                        barVisible = true
-                        barFocusTicket++
-                        return@onKeyEvent true
-                    }
-                    return@onKeyEvent false
-                }
-
-                if (barVisible && barOwnsFocus) {
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                        trayOpen = true
-                        lastInteraction = System.nanoTime()
-                        return@onKeyEvent true
-                    }
-                    return@onKeyEvent false
-                }
+                if (barVisible && barOwnsFocus) return@onKeyEvent false
 
                 when {
 
@@ -735,36 +715,9 @@ fun TvNowPlaying(
                 }
             )
 
-        // The tray: artwork and the actions worth one press away.
-        AnimatedVisibility(
-            visible = trayOpen,
-            enter = fadeIn(tween(200)) + slideInVertically(
-                initialOffsetY = { it / 3 },
-                animationSpec = tween(260, easing = FastOutSlowInEasing)
-            ),
-            exit = fadeOut(tween(150)) + slideOutVertically(
-                targetOffsetY = { it / 3 },
-                animationSpec = tween(200, easing = FastOutSlowInEasing)
-            ),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-        ) {
-            TvPlayerTray(
-                metadata = metadata,
-                canShowLyrics = canShowLyrics,
-                onGoToAlbum = { trayOpen = false; onGoToAlbum() },
-                onGoToArtist = { trayOpen = false; onGoToArtist() },
-                onLyrics = { trayOpen = false; toggleLyrics() },
-                onShare = { trayOpen = false; shareOpen = true },
-                onSleepTimer = { trayOpen = false; sleepTimerOpen = true }
-            )
-        }
-
         // The bar only exists while the remote is in use
         AnimatedVisibility(
-            // The tray takes the bar's place rather than stacking on top of it.
-            visible = barVisible && showAppleBar && !infoOpen && !trayOpen,
+            visible = barVisible && showAppleBar && !infoOpen,
             enter = fadeIn(tween(durationMillis = 300)) + slideInVertically(
                 initialOffsetY = { it },
                 animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
@@ -808,6 +761,12 @@ fun TvNowPlaying(
                 },
                 onOpenQueue = { queueOpen = true },
                 onOpenMore = { moreOpen = true },
+                hasAlbum = sheetAlbumId.isNotBlank(),
+                hasArtist = metadata?.extras?.getString("artistId").orEmpty().isNotBlank(),
+                onGoToAlbum = onGoToAlbum,
+                onGoToArtist = onGoToArtist,
+                onShare = { shareOpen = true },
+                onSleepTimer = { sleepTimerOpen = true },
                 onInteraction = { lastInteraction = System.nanoTime() }
             )
         }
@@ -935,6 +894,12 @@ private fun ApplePlayerBar(
     onToggleInfo: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenMore: () -> Unit,
+    hasAlbum: Boolean,
+    hasArtist: Boolean,
+    onGoToAlbum: () -> Unit,
+    onGoToArtist: () -> Unit,
+    onShare: () -> Unit,
+    onSleepTimer: () -> Unit,
     onInteraction: () -> Unit
 ) {
     val progressFocus = remember { FocusRequester() }
@@ -963,9 +928,53 @@ private fun ApplePlayerBar(
                 mediaController = mediaController,
                 color = color,
                 focusRequester = progressFocus,
-                onDown = { infoFocus.requestFocusSafely() },
                 onDismiss = onDismiss
             )
+
+        // The third bar: the work that used to hide behind a tray, as glass circles on
+        // the right of their own row, directly above the player bar.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (hasAlbum && !isRadio)
+                BarCircleButton(
+                    icon = R.drawable.rounded_library_music_24,
+                    contentDescription = "Go to Album",
+                    active = false,
+                    tint = color,
+                    modifier = Modifier.padding(end = 8.dp),
+                    onClick = onGoToAlbum
+                )
+
+            if (hasArtist && !isRadio)
+                BarCircleButton(
+                    icon = R.drawable.rounded_artist_24,
+                    contentDescription = "Go to Artist",
+                    active = false,
+                    tint = color,
+                    modifier = Modifier.padding(end = 8.dp),
+                    onClick = onGoToArtist
+                )
+
+            BarCircleButton(
+                icon = R.drawable.rounded_share_24,
+                contentDescription = "Share",
+                active = false,
+                tint = color,
+                modifier = Modifier.padding(end = 8.dp),
+                onClick = onShare
+            )
+
+            BarCircleButton(
+                icon = R.drawable.rounded_timer_24,
+                contentDescription = "Sleep timer",
+                active = false,
+                tint = color,
+                onClick = onSleepTimer
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1564,106 +1573,6 @@ private fun TvQueueRail(
     }
 }
 
-/** The tvOS tray: pulled up from the bar, holding the work worth one press. */
-@Composable
-private fun TvPlayerTray(
-    metadata: MediaMetadata?,
-    canShowLyrics: Boolean,
-    onGoToAlbum: () -> Unit,
-    onGoToArtist: () -> Unit,
-    onLyrics: () -> Unit,
-    onShare: () -> Unit,
-    onSleepTimer: () -> Unit
-) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
-
-    val albumId = metadata?.extras?.getString("albumId").orEmpty()
-    val artistId = metadata?.extras?.getString("artistId").orEmpty()
-    val sheetShape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(sheetShape)
-            .liquidGlass(sheetShape, base = Color(0xFF141416))
-            .padding(horizontal = 56.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(metadata?.artworkUri)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                fallback = painterResource(R.drawable.placeholder),
-                modifier = Modifier
-                    .size(88.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            )
-
-            Spacer(Modifier.width(20.dp))
-
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = metadata?.title?.toString().orEmpty(),
-                    fontSize = TvType.title3.fontSize,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = metadata?.artist?.toString().orEmpty(),
-                    fontSize = TvType.body.fontSize,
-                    color = Color.White.copy(alpha = 0.74f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (albumId.isNotBlank())
-                TrayAction("Go to Album", first, onGoToAlbum)
-            if (artistId.isNotBlank())
-                TrayAction("Go to Artist", null, onGoToArtist)
-            if (canShowLyrics)
-                TrayAction("Lyrics", null, onLyrics)
-            TrayAction("Share", null, onShare)
-            TrayAction("Sleep Timer", null, onSleepTimer)
-        }
-    }
-}
-
-@Composable
-private fun TrayAction(
-    label: String,
-    focusRequester: FocusRequester?,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        modifier = (if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .heightIn(min = 44.dp)
-            .glassRim(RoundedCornerShape(10.dp), strength = 0.8f),
-        shape = ButtonDefaults.shape(shape = RoundedCornerShape(10.dp)),
-        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
-        colors = ButtonDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.12f),
-            disabledContainerColor = Color.White.copy(alpha = 0.08f),
-            contentColor = Color.White,
-            disabledContentColor = Color.White.copy(alpha = 0.3f),
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color.Black
-        )
-    ) {
-        Text(text = label, fontSize = TvType.body.fontSize, fontWeight = FontWeight.Medium)
-    }
-}
-
 /** The ••• sheet: the actions the bar itself no longer carries. */
 @Composable
 private fun TvMoreSheet(
@@ -2215,8 +2124,8 @@ private fun ArtworkWash(colours: ArtworkColours) {
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        color.copy(alpha = 0.72f),
-                        color.copy(alpha = 0.42f),
+                        color.copy(alpha = 0.62f),
+                        color.copy(alpha = 0.34f),
                         Color.Transparent
                     ),
                     center = center,
