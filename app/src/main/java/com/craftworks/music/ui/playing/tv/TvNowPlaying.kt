@@ -121,6 +121,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.craftworks.music.R
 import com.craftworks.music.data.model.SyncedWord
+import com.craftworks.music.data.model.favorite
 import com.craftworks.music.data.model.id
 import com.craftworks.music.data.model.providerId
 import com.craftworks.music.data.repository.LyricsState
@@ -158,7 +159,8 @@ fun TvNowPlaying(
     onGoToAlbum: () -> Unit = {},
     onGoToArtist: () -> Unit = {},
     onDownload: () -> Unit = {},
-    onRefreshLyrics: () -> Unit = {}
+    onRefreshLyrics: () -> Unit = {},
+    onToggleFavorite: (String, Boolean) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val settings = remember(context) { AppearanceSettingsManager(context) }
@@ -178,7 +180,10 @@ fun TvNowPlaying(
     var shareOpen by remember { mutableStateOf(false) }
 
     val sheetAlbumId = metadata?.extras?.getString("albumId").orEmpty()
-    val sheetArtistId = metadata?.extras?.getString("artistId").orEmpty()
+
+    // The star reflects what the provider last said about this track, and flips on its
+    // own the moment it is pressed rather than waiting for the next metadata update.
+    var favorite by remember(metadata?.id) { mutableStateOf(metadata?.favorite ?: false) }
     val sheetSongId = metadata?.extras?.getString("id").orEmpty()
     var lyricsOpen by remember { mutableStateOf(false) }
     var sleepTimerOpen by remember { mutableStateOf(false) }
@@ -198,7 +203,6 @@ fun TvNowPlaying(
     val classicBarFocus = remember { FocusRequester() }
     var barFocusTicket by remember { mutableIntStateOf(0) }
     var focusBarOnShow by remember { mutableStateOf(false) }
-    val railFocus = remember { FocusRequester() }
 
     // Whether the page itself, rather than one of its buttons, is holding the remote.
     // The page only takes arrows while this is true, so a bar button always wins.
@@ -609,7 +613,7 @@ fun TvNowPlaying(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Spacer(Modifier.weight(0.5f))
+                            Spacer(Modifier.weight(1f))
 
                             AlbumArtHero(metadata = metadata, size = coverSize)
 
@@ -707,7 +711,8 @@ fun TvNowPlaying(
                 colours = colours,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 128.dp),
+                    // Clear of the player surface underneath it.
+                    .padding(bottom = 200.dp),
                 onDismiss = {
                     queueOpen = false
                     barFocusTicket++
@@ -743,36 +748,9 @@ fun TvNowPlaying(
                 }
             )
 
-        // The options: a column of glass circles down the right edge, above the bar.
-        AnimatedVisibility(
-            visible = barVisible && showAppleBar && !infoOpen,
-            enter = fadeIn(tween(durationMillis = 220)),
-            exit = fadeOut(tween(durationMillis = 200)),
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 40.dp, bottom = 150.dp)
-        ) {
-            TvOptionsRail(
-                colour = iconTextColor,
-                railFocus = railFocus,
-                hasAlbum = sheetAlbumId.isNotBlank(),
-                hasArtist = sheetArtistId.isNotBlank(),
-                onGoToAlbum = onGoToAlbum,
-                onGoToArtist = onGoToArtist,
-                onOpenQueue = { queueOpen = true },
-                onShare = { shareOpen = true },
-                onSleepTimer = { sleepTimerOpen = true },
-                onOpenMore = { moreOpen = true },
-                onDismiss = {
-                    barVisible = false
-                    pageFocus.requestFocusSafely()
-                },
-                onInteraction = { lastInteraction = System.nanoTime() }
-            )
-        }
-
-        // The player bar: Info, the transport and Lyrics on one line along the bottom,
-        // the way the tvOS player reads from left to right.
+        // The player surface: the actions, the timeline and the bottom edge, exactly
+        // where the tvOS player puts them, with the upper part of the screen left to
+        // the artwork.
         AnimatedVisibility(
             visible = barVisible && showAppleBar && !infoOpen,
             enter = fadeIn(tween(durationMillis = 300)) + slideInVertically(
@@ -786,8 +764,8 @@ fun TvNowPlaying(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(horizontal = 40.dp)
-                .padding(bottom = 24.dp)
+                .padding(horizontal = 48.dp)
+                .padding(bottom = 28.dp)
                 .focusGroup()
         ) {
             ApplePlayerBar(
@@ -796,19 +774,29 @@ fun TvNowPlaying(
                 isRadio = isRadio,
                 canShowLyrics = canShowLyrics,
                 lyricsOpen = lyricsOpen,
-                playFocus = barFocus,
-                railFocus = railFocus,
-                onDismiss = {
-                    barVisible = false
-                    pageFocus.requestFocusSafely()
-                },
+                queueOpen = queueOpen,
+                favorite = favorite,
+                entryFocus = barFocus,
                 onToggleLyrics = {
                     lyricsOpen = !lyricsOpen
                     lastInteraction = System.nanoTime()
                 },
+                onOpenQueue = { queueOpen = true },
                 onToggleInfo = {
                     infoOpen = !infoOpen
                     lastInteraction = System.nanoTime()
+                },
+                onToggleFavorite = {
+                    val songId = metadata?.id
+                    if (!songId.isNullOrBlank()) {
+                        favorite = !favorite
+                        onToggleFavorite(songId, favorite)
+                    }
+                },
+                onOpenMore = { moreOpen = true },
+                onDismiss = {
+                    barVisible = false
+                    pageFocus.requestFocusSafely()
                 },
                 onInteraction = { lastInteraction = System.nanoTime() }
             )
@@ -918,12 +906,17 @@ fun TvNowPlaying(
 }
 
 /**
- * The tvOS player bar: Info on the left, the transport in the middle, Lyrics on the
- * right, on one line along the bottom edge.
+ * The player surface under the artwork, in the three tiers the tvOS player uses:
  *
- * The scrubber above it is a readout rather than a focus target, so the remote can
- * never end up parked on it, and Up leaves the row for the options rail on the right
- * instead of wandering off into nothing.
+ *  - actions directly above the timeline, right-aligned: karaoke (unavailable here),
+ *    the favourite star and the more menu;
+ *  - the timeline, almost edge to edge, elapsed time on the left and what is left on
+ *    the right;
+ *  - the bottom edge: the Info pill on the left, and on the right the unavailable
+ *    karaoke toggle, the device picker and the Lyrics/Queue capsule.
+ *
+ * There is no transport row on purpose. On a ten-foot screen the remote is the
+ * transport, and what is left are the things a remote cannot say.
  */
 @Composable
 private fun ApplePlayerBar(
@@ -932,21 +925,28 @@ private fun ApplePlayerBar(
     isRadio: Boolean,
     canShowLyrics: Boolean,
     lyricsOpen: Boolean,
-    playFocus: FocusRequester,
-    railFocus: FocusRequester,
-    onDismiss: () -> Unit,
+    queueOpen: Boolean,
+    favorite: Boolean,
+    entryFocus: FocusRequester,
     onToggleLyrics: () -> Unit,
+    onOpenQueue: () -> Unit,
     onToggleInfo: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onOpenMore: () -> Unit,
+    onDismiss: () -> Unit,
     onInteraction: () -> Unit
 ) {
+    val shade = if (color.luminance() > 0.5f) Color.White else Color.Black
+    var pillFocused by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     onInteraction()
-                    // Back and Down both leave the bar; everything else belongs to its
-                    // buttons.
+                    // Back and Down both leave the bar; everything else belongs to the
+                    // controls above.
                     val code = keyEvent.nativeKeyEvent.keyCode
                     if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_DPAD_DOWN) {
                         onDismiss()
@@ -955,199 +955,287 @@ private fun ApplePlayerBar(
                 }
                 false
             },
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            UnavailableCircle(
+                icon = R.drawable.rounded_mic_24,
+                contentDescription = "Sing along is not available",
+                tint = color
+            )
+
+            Spacer(Modifier.width(12.dp))
+
+            BarCircleButton(
+                icon = if (favorite) R.drawable.round_favorite_24 else R.drawable.round_favorite_border_24,
+                contentDescription = if (favorite) "Remove from favourites" else "Add to favourites",
+                active = favorite,
+                tint = color,
+                size = 44.dp,
+                modifier = Modifier.focusRequester(entryFocus),
+                onClick = onToggleFavorite
+            )
+
+            Spacer(Modifier.width(12.dp))
+
+            BarCircleButton(
+                icon = R.drawable.rounded_more_horiz_24,
+                contentDescription = "More",
+                active = false,
+                tint = color,
+                size = 44.dp,
+                onClick = onOpenMore
+            )
+        }
+
         if (!isRadio)
-            TvPlaybackProgress(mediaController = mediaController, color = color)
+            TvPlayerTimeline(mediaController = mediaController, color = color)
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Equal side slots keep the transport exactly centred whatever sits in them.
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                val pillShade = if (color.luminance() > 0.5f) Color.White else Color.Black
-                var pillFocused by remember { mutableStateOf(false) }
-
-                Button(
-                    onClick = onToggleInfo,
-                    modifier = Modifier
-                        .onFocusChanged { pillFocused = it.hasFocus }
-                        .glassRim(CircleShape, focused = pillFocused, strength = 0.85f)
-                        .focusProperties { up = railFocus },
-                    shape = ButtonDefaults.shape(shape = CircleShape),
-                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-                    colors = ButtonDefaults.colors(
-                        containerColor = pillShade.copy(alpha = 0.14f),
-                        disabledContainerColor = pillShade.copy(alpha = 0.10f),
-                        contentColor = color,
-                        disabledContentColor = color.copy(alpha = 0.3f),
-                        focusedContainerColor = pillShade.copy(alpha = 0.38f),
-                        focusedContentColor = color
-                    )
-                ) {
-                    Text(text = "Info", fontSize = TvType.callout.fontSize, fontWeight = FontWeight.Medium)
-                }
+            Button(
+                onClick = onToggleInfo,
+                modifier = Modifier
+                    .onFocusChanged { pillFocused = it.hasFocus }
+                    .glassRim(CircleShape, focused = pillFocused, strength = 0.85f),
+                shape = ButtonDefaults.shape(shape = CircleShape),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                colors = ButtonDefaults.colors(
+                    containerColor = shade.copy(alpha = 0.14f),
+                    disabledContainerColor = shade.copy(alpha = 0.10f),
+                    contentColor = color,
+                    disabledContentColor = color.copy(alpha = 0.3f),
+                    focusedContainerColor = shade.copy(alpha = 0.38f),
+                    focusedContentColor = color
+                )
+            ) {
+                Text(text = "Info", fontSize = TvType.callout.fontSize, fontWeight = FontWeight.Medium)
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BarCircleButton(
-                    icon = R.drawable.rounded_skip_previous_24,
-                    contentDescription = "Previous",
-                    active = false,
-                    tint = color,
-                    size = 44.dp,
-                    modifier = Modifier.focusProperties { up = railFocus },
-                    onClick = {
-                        mediaController?.seekToPreviousMediaItem()
-                        onInteraction()
-                    }
-                )
+            Spacer(Modifier.weight(1f))
 
-                Spacer(Modifier.width(12.dp))
+            UnavailableCircle(
+                icon = R.drawable.rounded_mic_24,
+                contentDescription = "Sing along is not available",
+                tint = color
+            )
 
-                TransportPlayButton(
-                    mediaController = mediaController,
-                    color = color,
-                    focus = playFocus,
-                    railFocus = railFocus,
-                    onInteraction = onInteraction
-                )
+            Spacer(Modifier.width(10.dp))
 
-                Spacer(Modifier.width(12.dp))
+            // Android has no AirPlay to hand over to, and no route picker either, so
+            // the device button sits where tvOS puts it, dimmed, instead of pretending.
+            UnavailableCircle(
+                icon = R.drawable.rounded_airplay_24,
+                contentDescription = "No output device to choose",
+                tint = color
+            )
 
-                BarCircleButton(
-                    icon = R.drawable.rounded_skip_next_24,
-                    contentDescription = "Next",
-                    active = false,
-                    tint = color,
-                    size = 44.dp,
-                    modifier = Modifier.focusProperties { up = railFocus },
-                    onClick = {
-                        mediaController?.seekToNextMediaItem()
-                        onInteraction()
-                    }
-                )
-            }
+            Spacer(Modifier.width(16.dp))
 
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                // The slot is kept when a track has no lyrics so the transport never
-                // shifts sideways between songs.
-                if (canShowLyrics) {
-                    BarCircleButton(
-                        icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
-                        contentDescription = "Lyrics",
-                        active = lyricsOpen,
-                        tint = color,
-                        size = 44.dp,
-                        modifier = Modifier.focusProperties { up = railFocus },
-                        onClick = onToggleLyrics
-                    )
-                } else {
-                    Spacer(Modifier.size(44.dp))
-                }
-            }
+            LyricsQueueCapsule(
+                colour = color,
+                lyricsActive = lyricsOpen,
+                canShowLyrics = canShowLyrics,
+                queueActive = queueOpen,
+                onLyrics = onToggleLyrics,
+                onQueue = onOpenQueue
+            )
         }
     }
 }
 
-/** Play and pause as one button, drawn from the player's own state. */
+/** Something tvOS offers and this platform does not: drawn, never focusable. */
 @Composable
-private fun TransportPlayButton(
-    mediaController: MediaController?,
-    color: Color,
-    focus: FocusRequester,
-    railFocus: FocusRequester,
-    onInteraction: () -> Unit
+private fun UnavailableCircle(icon: Int, contentDescription: String, tint: Color, size: Dp = 44.dp) {
+    val shade = if (tint.luminance() > 0.5f) Color.White else Color.Black
+
+    Box(
+        modifier = Modifier
+            .size(size)
+            .background(shade.copy(alpha = 0.08f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = contentDescription,
+            tint = tint.copy(alpha = 0.30f),
+            modifier = Modifier.size(size * 0.5f)
+        )
+    }
+}
+
+/**
+ * The grouped Lyrics/Queue toggle: two circles in one capsule, the active one filled
+ * solid white with dark ink, exactly like the tvOS view switch.
+ */
+@Composable
+private fun LyricsQueueCapsule(
+    colour: Color,
+    lyricsActive: Boolean,
+    canShowLyrics: Boolean,
+    queueActive: Boolean,
+    onLyrics: () -> Unit,
+    onQueue: () -> Unit
 ) {
-    var playing by remember { mutableStateOf(mediaController?.isPlaying == true) }
+    val shade = if (colour.luminance() > 0.5f) Color.White else Color.Black
+
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(shade.copy(alpha = 0.14f))
+            .border(1.dp, shade.copy(alpha = 0.10f), CircleShape)
+            .padding(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (canShowLyrics)
+            CapsuleButton(
+                icon = if (lyricsActive) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
+                contentDescription = "Lyrics",
+                active = lyricsActive,
+                colour = colour,
+                onClick = onLyrics
+            )
+
+        CapsuleButton(
+            icon = R.drawable.rounded_queue_music_24,
+            contentDescription = "Queue",
+            active = queueActive,
+            colour = colour,
+            onClick = onQueue
+        )
+    }
+}
+
+@Composable
+private fun CapsuleButton(
+    icon: Int,
+    contentDescription: String,
+    active: Boolean,
+    colour: Color,
+    onClick: () -> Unit
+) {
+    val shade = if (colour.luminance() > 0.5f) Color.White else Color.Black
+
+    Button(
+        onClick = onClick,
+        modifier = Modifier.size(40.dp),
+        shape = ButtonDefaults.shape(shape = CircleShape),
+        contentPadding = PaddingValues(0.dp),
+        colors = ButtonDefaults.colors(
+            containerColor = if (active) Color.White else Color.Transparent,
+            disabledContainerColor = Color.Transparent,
+            contentColor = if (active) Color.Black else colour.copy(alpha = 0.78f),
+            disabledContentColor = colour.copy(alpha = 0.3f),
+            focusedContainerColor = if (active) Color.White else shade.copy(alpha = 0.30f),
+            focusedContentColor = if (active) Color.Black else colour
+        )
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/**
+ * The timeline: one thin bar nearly edge to edge, the elapsed time on its left and what
+ * is left on its right.
+ *
+ * It is a readout rather than a focus target, so the remote never parks on it, and the
+ * D-Pad keeps seeking the way it did before the bar appeared.
+ */
+@Composable
+private fun TvPlayerTimeline(mediaController: MediaController?, color: Color) {
+    var position by remember { mutableLongStateOf(0L) }
+    var duration by remember { mutableLongStateOf(0L) }
+    var playing by remember { mutableStateOf(false) }
 
     DisposableEffect(mediaController) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing = isPlaying
             }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                position = newPosition.positionMs
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                duration = mediaController?.duration?.coerceAtLeast(0L) ?: 0L
+            }
         }
+
         mediaController?.addListener(listener)
+        position = mediaController?.currentPosition ?: 0L
+        duration = mediaController?.duration?.coerceAtLeast(0L) ?: 0L
         playing = mediaController?.isPlaying == true
+
         onDispose { mediaController?.removeListener(listener) }
     }
 
-    BarCircleButton(
-        icon = if (playing) R.drawable.rounded_pause_24 else R.drawable.rounded_play_24,
-        contentDescription = if (playing) "Pause" else "Play",
-        active = false,
-        tint = color,
-        size = 52.dp,
-        iconSize = 24.dp,
-        modifier = Modifier
-            .focusRequester(focus)
-            .focusProperties { up = railFocus },
-        onClick = {
-            mediaController.togglePlayback()
-            onInteraction()
+    LaunchedEffect(mediaController, playing) {
+        while (isActive && playing) {
+            mediaController?.let {
+                position = it.currentPosition
+                duration = it.duration.coerceAtLeast(0L)
+            }
+            delay(500L)
         }
-    )
-}
-
-/**
- * The options rail: everything that is not the transport, as a column of circles down
- * the right edge. Push Up from the bar to reach it, Down or Back to leave.
- */
-@Composable
-private fun TvOptionsRail(
-    colour: Color,
-    railFocus: FocusRequester,
-    hasAlbum: Boolean,
-    hasArtist: Boolean,
-    onGoToAlbum: () -> Unit,
-    onGoToArtist: () -> Unit,
-    onOpenQueue: () -> Unit,
-    onShare: () -> Unit,
-    onSleepTimer: () -> Unit,
-    onOpenMore: () -> Unit,
-    onDismiss: () -> Unit,
-    onInteraction: () -> Unit
-) {
-    val items = buildList {
-        if (hasAlbum) add(Triple(R.drawable.rounded_library_music_24, "Go to Album", onGoToAlbum))
-        if (hasArtist) add(Triple(R.drawable.rounded_artist_24, "Go to Artist", onGoToArtist))
-        add(Triple(R.drawable.rounded_queue_music_24, "Queue", onOpenQueue))
-        add(Triple(R.drawable.rounded_share_24, "Share", onShare))
-        add(Triple(R.drawable.rounded_timer_24, "Sleep timer", onSleepTimer))
-        add(Triple(R.drawable.rounded_more_horiz_24, "More", onOpenMore))
     }
 
-    Column(
-        modifier = Modifier
-            .focusGroup()
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown) {
-                    onInteraction()
-                    if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
-                        onDismiss()
-                        return@onKeyEvent true
-                    }
-                }
-                false
-            },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    val fraction = if (duration > 0L) {
+        (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+    val remaining = (duration - position).coerceAtLeast(0L)
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        items.forEachIndexed { index, item ->
-            BarCircleButton(
-                icon = item.first,
-                contentDescription = item.second,
-                active = false,
-                tint = colour,
-                size = 44.dp,
-                modifier = if (index == 0) Modifier.focusRequester(railFocus) else Modifier,
-                onClick = {
-                    onInteraction()
-                    item.third()
-                }
+        Text(
+            text = StringUtils.formatSeconds((position / 1000L).toInt()),
+            fontSize = TvType.callout.fontSize,
+            fontWeight = FontWeight.Light,
+            color = color.copy(alpha = 0.62f)
+        )
+
+        Spacer(Modifier.width(18.dp))
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(3.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.22f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction)
+                    .height(3.dp)
+                    .clip(CircleShape)
+                    .background(color)
             )
         }
+
+        Spacer(Modifier.width(18.dp))
+
+        Text(
+            text = "-" + StringUtils.formatSeconds((remaining / 1000L).toInt()),
+            fontSize = TvType.callout.fontSize,
+            fontWeight = FontWeight.Light,
+            color = color.copy(alpha = 0.62f)
+        )
     }
 }
 
@@ -1158,8 +1246,8 @@ private fun BarCircleButton(
     active: Boolean,
     tint: Color,
     modifier: Modifier = Modifier,
-    size: Dp = 38.dp,
-    iconSize: Dp = 18.dp,
+    size: Dp = 44.dp,
+    iconSize: Dp = 20.dp,
     onClick: () -> Unit
 ) {
     // Liquid glass: a translucent shade of the player's own ink inside a hairline
@@ -1298,119 +1386,6 @@ private fun PlayingIndicator(color: Color, mediaController: MediaController?) {
                     .fillMaxHeight(if (playing) fraction else 0.35f)
                     .clip(CircleShape)
                     .background(color.copy(alpha = if (playing) 0.9f else 0.35f))
-            )
-        }
-    }
-}
-
-@Composable
-private fun TvPlaybackProgress(
-    mediaController: MediaController?,
-    color: Color,
-    modifier: Modifier = Modifier,
-    focusRequester: FocusRequester? = null,
-    onDown: (() -> Unit)? = null,
-    onDismiss: (() -> Unit)? = null
-) {
-    var focused by remember { mutableStateOf(false) }
-    var position by remember { mutableLongStateOf(0L) }
-    var duration by remember { mutableLongStateOf(0L) }
-    var playing by remember { mutableStateOf(false) }
-
-    DisposableEffect(mediaController) {
-        val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                playing = isPlaying
-            }
-
-            override fun onPositionDiscontinuity(
-                oldPosition: Player.PositionInfo,
-                newPosition: Player.PositionInfo,
-                reason: Int
-            ) {
-                position = newPosition.positionMs
-            }
-
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                duration = mediaController?.duration?.coerceAtLeast(0L) ?: 0L
-            }
-        }
-
-        mediaController?.addListener(listener)
-        position = mediaController?.currentPosition ?: 0L
-        duration = mediaController?.duration?.coerceAtLeast(0L) ?: 0L
-        playing = mediaController?.isPlaying == true
-
-        onDispose { mediaController?.removeListener(listener) }
-    }
-
-    LaunchedEffect(mediaController, playing) {
-        while (isActive && playing) {
-            mediaController?.let {
-                position = it.currentPosition
-                duration = it.duration.coerceAtLeast(0L)
-            }
-            delay(500L)
-        }
-    }
-
-    val fraction = if (duration > 0L) {
-        (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-    val remaining = (duration - position).coerceAtLeast(0L)
-
-    Column(
-        modifier
-            .fillMaxWidth()
-            .then(
-                if (focusRequester != null) Modifier
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { focused = it.isFocused }
-                    .focusable()
-                    .onKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                        when (event.nativeKeyEvent.keyCode) {
-                            KeyEvent.KEYCODE_DPAD_DOWN -> { onDown?.invoke(); true }
-                            KeyEvent.KEYCODE_BACK -> { onDismiss?.invoke(); true }
-                            else -> false
-                        }
-                    }
-                else Modifier
-            )
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(if (focused) 5.dp else 3.dp)
-                .clip(CircleShape)
-                .background(color.copy(alpha = if (focused) 0.38f else 0.22f))
-        ) {
-            Box(
-                Modifier
-                    .fillMaxWidth(fraction)
-                    .height(3.dp)
-                    .clip(CircleShape)
-                    .background(color)
-            )
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = StringUtils.formatSeconds((position / 1000L).toInt()),
-                fontSize = TvType.callout.fontSize,
-                fontWeight = FontWeight.Light,
-                color = color.copy(alpha = 0.55f)
-            )
-            Text(
-                text = "-" + StringUtils.formatSeconds((remaining / 1000L).toInt()),
-                fontSize = TvType.callout.fontSize,
-                fontWeight = FontWeight.Light,
-                color = color.copy(alpha = 0.55f)
             )
         }
     }

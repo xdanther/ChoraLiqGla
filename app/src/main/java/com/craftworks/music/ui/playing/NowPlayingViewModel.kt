@@ -13,8 +13,10 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
+import com.craftworks.music.data.model.LibraryType
 import com.craftworks.music.data.repository.LyricsRepository
 import com.craftworks.music.data.repository.SongRepository
+import com.craftworks.music.data.repository.StarredRepository
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
 import com.craftworks.music.managers.settings.MiscSettingsManager
 import com.craftworks.music.managers.settings.PlaybackSettingsManager
@@ -34,6 +36,7 @@ class NowPlayingViewModel @Inject constructor (
     @ApplicationContext private val context: Context,
     val songRepository: SongRepository,
     val lyricsRepository: LyricsRepository,
+    private val starredRepository: StarredRepository,
     val appearanceSettingsManager: AppearanceSettingsManager,
     val playbackSettingsManager: PlaybackSettingsManager,
     val miscSettingsManager: MiscSettingsManager,
@@ -51,6 +54,14 @@ class NowPlayingViewModel @Inject constructor (
     val sleepTimerDialogOpen = _sleepTimerDialogOpen.asStateFlow()
 
     fun setLyricsOpen(open: Boolean) { _lyricsOpen.value = open }
+
+    /** Star or unstar the playing track, for the player's favourite button. */
+    fun setSongFavorite(songId: String, favorite: Boolean) {
+        viewModelScope.launch {
+            if (favorite) starredRepository.starItem(listOf(songId), LibraryType.SONG)
+            else starredRepository.unStarItem(listOf(songId), LibraryType.SONG)
+        }
+    }
     fun setPlayQueueOpen(open: Boolean) { _playQueueOpen.value = open }
     fun setDetailsOpen(open: Boolean) { _detailsOpen.value = open }
     fun setSleepTimerDialogOpen(open: Boolean) { _sleepTimerDialogOpen.value = open }

@@ -105,6 +105,7 @@ fun NowPlayingContent(
             colours = artworkColours,
             onDownload = { metadata?.let { viewModel.downloadSong(it) } },
             onRefreshLyrics = { viewModel.refreshLyrics(metadata) },
+            onToggleFavorite = { songId, favorite -> viewModel.setSongFavorite(songId, favorite) },
             onGoToAlbum = {
                 val albumId = metadata?.extras?.getString("albumId")
                 if (!albumId.isNullOrBlank()) {
