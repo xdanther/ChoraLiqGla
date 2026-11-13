@@ -41,6 +41,7 @@ import com.craftworks.music.data.model.Screen
 import com.craftworks.music.managers.settings.AppTheme
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
 import com.craftworks.music.managers.settings.OLEDProtectionMode
+import com.craftworks.music.managers.settings.TvTextSize
 import com.craftworks.music.ui.playing.NowPlayingAlignment
 import com.craftworks.music.ui.playing.NowPlayingBackground
 import com.craftworks.music.ui.screens.HomeItem
@@ -287,6 +288,36 @@ fun OledProtectionModeDialog(
                     OLEDProtectionMode.OFF -> R.string.oled_protection_mode_off
                     OLEDProtectionMode.LYRICS_ONLY -> R.string.oled_protection_mode_lyrics_only
                     OLEDProtectionMode.MINIMAL -> R.string.oled_protection_mode_minimal
+                }
+            )
+        }
+    )
+}
+
+@Composable
+fun TvTextSizeDialog(
+    setShowDialog: (Boolean) -> Unit = { }
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val textSize by AppearanceSettingsManager(context).tvTextSizeFlow.collectAsState(
+        TvTextSize.DEFAULT
+    )
+
+    GenericListDialog(
+        setShowDialog = setShowDialog,
+        titleRes = R.string.appearance_tv_text_size,
+        options = TvTextSize.entries,
+        selectedOption = textSize,
+        onOptionSelected = { option ->
+            coroutineScope.launch { AppearanceSettingsManager(context).setTvTextSize(option) }
+        },
+        label = { option ->
+            stringResource(
+                when (option) {
+                    TvTextSize.DEFAULT -> R.string.tv_text_size_default
+                    TvTextSize.LARGE -> R.string.tv_text_size_large
+                    TvTextSize.LARGER -> R.string.tv_text_size_larger
                 }
             )
         }

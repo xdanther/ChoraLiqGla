@@ -36,6 +36,7 @@ import com.craftworks.music.R
 import com.craftworks.music.managers.settings.AppTheme
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
 import com.craftworks.music.managers.settings.OLEDProtectionMode
+import com.craftworks.music.managers.settings.TvTextSize
 import com.craftworks.music.ui.elements.dialogs.tv.BackgroundDialog
 import com.craftworks.music.ui.elements.dialogs.tv.HomeItemsDialog
 import com.craftworks.music.ui.elements.dialogs.tv.NameDialog
@@ -43,6 +44,7 @@ import com.craftworks.music.ui.elements.dialogs.tv.NavbarItemsDialog
 import com.craftworks.music.ui.elements.dialogs.tv.NowPlayingAlignmentDialog
 import com.craftworks.music.ui.elements.dialogs.tv.OledProtectionModeDialog
 import com.craftworks.music.ui.elements.dialogs.tv.ThemeDialog
+import com.craftworks.music.ui.elements.dialogs.tv.TvTextSizeDialog
 import com.craftworks.music.ui.playing.NowPlayingAlignment
 import com.craftworks.music.ui.playing.NowPlayingBackground
 import kotlinx.coroutines.launch
@@ -58,6 +60,7 @@ fun TvS_AppearanceScreen() {
     var showNavbarItemsDialog by remember { mutableStateOf(false) }
     var showHomeItemsDialog by remember { mutableStateOf(false) }
     var showNowPlayingLyricsAlignmentDialog by remember { mutableStateOf(false) }
+    var showTextSizeDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -207,6 +210,25 @@ fun TvS_AppearanceScreen() {
                     ),
                     icon = ImageVector.vectorResource(R.drawable.rounded_sort_24),
                     onClick = { showNowPlayingLyricsAlignmentDialog = true }
+                )
+
+                // Dynamic Type: Android TV has no system font size, so this is ours
+                val tvTextSize by AppearanceSettingsManager(context).tvTextSizeFlow.collectAsState(
+                    TvTextSize.DEFAULT
+                )
+                val textSizeLabels = mapOf(
+                    TvTextSize.DEFAULT to R.string.tv_text_size_default,
+                    TvTextSize.LARGE to R.string.tv_text_size_large,
+                    TvTextSize.LARGER to R.string.tv_text_size_larger
+                )
+
+                SettingsButtonItem(
+                    title = stringResource(R.string.appearance_tv_text_size),
+                    subtitle = stringResource(
+                        textSizeLabels[tvTextSize] ?: R.string.tv_text_size_default
+                    ),
+                    icon = ImageVector.vectorResource(R.drawable.outline_line_weight_24),
+                    onClick = { showTextSizeDialog = true }
                 )
             }
         }
@@ -448,6 +470,7 @@ fun TvS_AppearanceScreen() {
     if (showThemesDialog) ThemeDialog(setShowDialog = { showThemesDialog = it })
     if (showNavbarItemsDialog) NavbarItemsDialog(setShowDialog = { showNavbarItemsDialog = it })
     if (showHomeItemsDialog) HomeItemsDialog(setShowDialog = { showHomeItemsDialog = it })
+    if (showTextSizeDialog) TvTextSizeDialog(setShowDialog = { showTextSizeDialog = it })
     if (showNowPlayingLyricsAlignmentDialog) NowPlayingAlignmentDialog(
         setShowDialog = { showNowPlayingLyricsAlignmentDialog = it },
         selection = nowPlayingTitleAlignment,

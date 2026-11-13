@@ -1,5 +1,6 @@
 package com.craftworks.music.ui.screens.tv
 
+import com.craftworks.music.ui.theme.TvType
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -244,7 +245,7 @@ fun TvHomeScreen(
                 Text(
                     text = stringResource(titleMap[item.key] ?: R.string.home_recently_played),
                     style = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize = 22.sp,
+                        fontSize = TvType.title3.fontSize,
                         fontWeight = FontWeight.SemiBold
                     ),
                     color = MaterialTheme.colorScheme.onBackground,

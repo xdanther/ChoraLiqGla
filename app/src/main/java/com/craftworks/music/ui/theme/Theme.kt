@@ -12,14 +12,22 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Density
 import androidx.core.view.WindowCompat
 import androidx.tv.material3.MaterialTheme
+import com.craftworks.music.managers.settings.AppearanceSettingsManager
+import com.craftworks.music.managers.settings.TvTextSize
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -67,6 +75,7 @@ fun MusicPlayerTheme(
     content: @Composable () -> Unit
 ) {
     val isTv = LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
+    val context = LocalContext.current
 
     println("Setting theme dark:${darkTheme} for ${if (isTv) "tv" else "phone"}")
 
@@ -89,11 +98,25 @@ fun MusicPlayerTheme(
 
         println("using theme dark:$darkTheme for tv")
 
+        // Dynamic Type. Android TV exposes no system font size, so the app carries its
+        // own scale; only sp is scaled, so covers, spacing and focus rings stay put.
+        val settings = remember(context) { AppearanceSettingsManager(context) }
+        val textSize by settings.tvTextSizeFlow.collectAsState(TvTextSize.DEFAULT)
+        val density = LocalDensity.current
+
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = androidx.tv.material3.Typography(),
-            content = content
-        )
+            typography = TvTypography
+        ) {
+            CompositionLocalProvider(
+                LocalDensity provides Density(
+                    density = density.density,
+                    fontScale = density.fontScale * textSize.scale
+                )
+            ) {
+                content()
+            }
+        }
     }
     else {
         val colorScheme = when {

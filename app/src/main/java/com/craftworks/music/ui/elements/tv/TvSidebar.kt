@@ -1,5 +1,7 @@
 package com.craftworks.music.ui.elements.tv
 
+import androidx.compose.foundation.layout.heightIn
+import com.craftworks.music.ui.theme.TvType
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -319,7 +321,7 @@ private fun TvSidebarPanel(
 
             Text(
                 text = username,
-                fontSize = 14.sp,
+                fontSize = TvType.body.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White,
                 maxLines = 1,
@@ -331,7 +333,7 @@ private fun TvSidebarPanel(
 
             Text(
                 text = clock,
-                fontSize = 12.sp,
+                fontSize = TvType.callout.fontSize,
                 color = Color.White.copy(alpha = 0.50f),
                 maxLines = 1
             )
@@ -354,7 +356,7 @@ private fun TvSidebarPanel(
 
         Text(
             text = "More",
-            fontSize = 12.sp,
+            fontSize = TvType.callout.fontSize,
             fontWeight = FontWeight.Medium,
             color = Color.White.copy(alpha = 0.50f),
             modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
@@ -399,7 +401,7 @@ private fun TvSidebarItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(42.dp)
+            .heightIn(min = 42.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -422,7 +424,7 @@ private fun TvSidebarItem(
         Text(
             text = label,
             color = contentColor,
-            fontSize = 15.sp,
+            fontSize = TvType.body.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

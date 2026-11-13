@@ -1,5 +1,6 @@
 package com.craftworks.music.ui.screens.tv
 
+import com.craftworks.music.ui.theme.TvType
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -268,7 +270,7 @@ fun TvAlbumDetails(
                 ) {
                     Text(
                         text = album.title?.toString() ?: "",
-                        fontSize = 34.sp,
+                        fontSize = TvType.title1.fontSize,
                         lineHeight = 40.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -280,7 +282,7 @@ fun TvAlbumDetails(
 
                     Text(
                         text = album.artist?.toString() ?: "",
-                        fontSize = 19.sp,
+                        fontSize = TvType.headline.fontSize,
                         color = Color.White.copy(alpha = 0.78f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -294,7 +296,7 @@ fun TvAlbumDetails(
                             album.recordingYear?.takeIf { it > 0 }?.let { add(it.toString()) }
                             album.extras?.getString("format")?.takeIf { it.isNotBlank() }?.let(::add)
                         }.joinToString(" · "),
-                        fontSize = 15.sp,
+                        fontSize = TvType.body.fontSize,
                         color = Color.White.copy(alpha = 0.5f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -307,7 +309,7 @@ fun TvAlbumDetails(
 
                         Text(
                             text = comment,
-                            fontSize = 14.sp,
+                            fontSize = TvType.body.fontSize,
                             lineHeight = 19.sp,
                             color = Color.White.copy(alpha = 0.72f),
                             maxLines = if (descriptionExpanded) 6 else 2,
@@ -336,7 +338,7 @@ fun TvAlbumDetails(
                                 ) {
                                     Text(
                                         text = if (descriptionExpanded) "LESS" else "MORE",
-                                        fontSize = 12.sp,
+                                        fontSize = TvType.callout.fontSize,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -360,7 +362,8 @@ fun TvAlbumDetails(
                                 }
                             },
                             modifier = Modifier
-                                .height(40.dp)
+                                // min, not fixed: the label grows with the text size
+                                .heightIn(min = 40.dp)
                                 .focusRequester(playRequester),
                             shape = ButtonDefaults.shape(shape = CircleShape),
                             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
@@ -379,7 +382,7 @@ fun TvAlbumDetails(
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 text = stringResource(R.string.action_play),
-                                fontSize = 16.sp,
+                                fontSize = TvType.body.fontSize,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -445,7 +448,7 @@ fun TvAlbumDetails(
                                 item {
                                     Text(
                                         text = stringResource(R.string.album_details_disc, discNumber.toString()),
-                                        fontSize = 13.sp,
+                                        fontSize = TvType.callout.fontSize,
                                         fontWeight = FontWeight.Medium,
                                         color = Color.White.copy(alpha = 0.5f),
                                         modifier = Modifier.padding(
@@ -503,7 +506,7 @@ fun TvAlbumDetails(
                         releaseDate?.let {
                             Text(
                                 text = it,
-                                fontSize = 12.sp,
+                                fontSize = TvType.callout.fontSize,
                                 color = Color.White.copy(alpha = 0.45f),
                                 maxLines = 1
                             )
@@ -515,7 +518,7 @@ fun TvAlbumDetails(
                                 append(totalMinutes)
                                 append(if (totalMinutes == 1) " minute" else " minutes")
                             },
-                            fontSize = 12.sp,
+                            fontSize = TvType.callout.fontSize,
                             color = Color.White.copy(alpha = 0.45f),
                             maxLines = 1
                         )
@@ -528,7 +531,7 @@ fun TvAlbumDetails(
                                     }
                                     append(labels)
                                 },
-                                fontSize = 12.sp,
+                                fontSize = TvType.callout.fontSize,
                                 color = Color.White.copy(alpha = 0.45f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -654,7 +657,7 @@ private fun AlbumOptionsDialog(
             ) {
                 Text(
                     text = title,
-                    fontSize = 24.sp,
+                    fontSize = TvType.title3.fontSize,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     maxLines = 1,
@@ -663,7 +666,7 @@ private fun AlbumOptionsDialog(
 
                 Text(
                     text = artistName,
-                    fontSize = 15.sp,
+                    fontSize = TvType.body.fontSize,
                     color = Color.White.copy(alpha = 0.6f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -736,7 +739,7 @@ private fun TvAlbumTrackRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(46.dp)
+            .heightIn(min = 46.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(background)
             .combinedClickable(
@@ -763,7 +766,7 @@ private fun TvAlbumTrackRow(
                 else
                     Text(
                         text = (metadata.trackNumber ?: 0).toString(),
-                        fontSize = 15.sp,
+                        fontSize = TvType.body.fontSize,
                         color = contentColor.copy(alpha = if (focused) 0.7f else 0.5f)
                     )
             }
@@ -772,7 +775,7 @@ private fun TvAlbumTrackRow(
         if (metadata.favorite == true) {
             Text(
                 text = "★",
-                fontSize = 11.sp,
+                fontSize = TvType.subhead.fontSize,
                 color = contentColor.copy(alpha = 0.55f),
                 modifier = Modifier.padding(end = 6.dp)
             )
@@ -780,7 +783,7 @@ private fun TvAlbumTrackRow(
 
         Text(
             text = metadata.title?.toString() ?: "",
-            fontSize = 17.sp,
+            fontSize = TvType.body.fontSize,
             fontWeight = if (isCurrent) FontWeight.Medium else FontWeight.Normal,
             color = contentColor,
             maxLines = 1,
@@ -802,7 +805,7 @@ private fun TvAlbumTrackRow(
             text = StringUtils.formatSeconds(
                 metadata.durationMs?.div(1000)?.toInt() ?: 0
             ),
-            fontSize = 15.sp,
+            fontSize = TvType.body.fontSize,
             color = contentColor.copy(alpha = if (focused || isCurrent) 0.75f else 0.5f),
             modifier = Modifier.padding(start = 16.dp)
         )

@@ -2,6 +2,7 @@
 
 package com.craftworks.music.ui.playing.tv
 
+import com.craftworks.music.ui.theme.TvType
 import android.view.KeyEvent
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
@@ -495,7 +496,7 @@ fun TvNowPlaying(
                                         )
                                         Text(
                                             text = metadata?.title?.toString().orEmpty(),
-                                            fontSize = 24.sp,
+                                            fontSize = TvType.title3.fontSize,
                                             fontWeight = FontWeight.SemiBold,
                                             color = iconTextColor,
                                             maxLines = 1,
@@ -507,7 +508,7 @@ fun TvNowPlaying(
 
                                     Text(
                                         text = metadata?.artist?.toString().orEmpty(),
-                                        fontSize = 15.sp,
+                                        fontSize = TvType.body.fontSize,
                                         color = iconTextColor.copy(alpha = 0.74f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -563,7 +564,7 @@ fun TvNowPlaying(
                                 text = metadata?.albumTitle?.toString()
                                     ?.ifBlank { null }
                                     ?: metadata?.artist?.toString().orEmpty(),
-                                fontSize = 15.sp,
+                                fontSize = TvType.body.fontSize,
                                 fontWeight = FontWeight.Medium,
                                 color = iconTextColor.copy(alpha = 0.74f),
                                 textAlign = TextAlign.Center,
@@ -588,7 +589,7 @@ fun TvNowPlaying(
                                 )
                                 Text(
                                     text = metadata?.title?.toString().orEmpty(),
-                                    fontSize = 24.sp,
+                                    fontSize = TvType.title3.fontSize,
                                     fontWeight = FontWeight.SemiBold,
                                     color = iconTextColor,
                                     maxLines = 1,
@@ -600,7 +601,7 @@ fun TvNowPlaying(
 
                             Text(
                                 text = metadata?.artist?.toString().orEmpty(),
-                                fontSize = 15.sp,
+                                fontSize = TvType.body.fontSize,
                                 color = iconTextColor.copy(alpha = 0.74f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -929,7 +930,7 @@ private fun ApplePlayerBar(
                     focusedContentColor = color
                 )
             ) {
-                Text(text = "Info", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text(text = "Info", fontSize = TvType.callout.fontSize, fontWeight = FontWeight.Medium)
             }
 
             Spacer(Modifier.weight(1f))
@@ -1223,13 +1224,13 @@ private fun TvPlaybackProgress(
         ) {
             Text(
                 text = StringUtils.formatSeconds((position / 1000L).toInt()),
-                fontSize = 13.sp,
+                fontSize = TvType.callout.fontSize,
                 fontWeight = FontWeight.Light,
                 color = color.copy(alpha = 0.55f)
             )
             Text(
                 text = "-" + StringUtils.formatSeconds((remaining / 1000L).toInt()),
-                fontSize = 13.sp,
+                fontSize = TvType.callout.fontSize,
                 fontWeight = FontWeight.Light,
                 color = color.copy(alpha = 0.55f)
             )
@@ -1373,7 +1374,7 @@ private fun TvQueueSheet(
             Text(
                 text = "Up Next",
                 color = Color.White,
-                fontSize = 18.sp,
+                fontSize = TvType.headline.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
@@ -1410,14 +1411,14 @@ private fun TvQueueSheet(
                         Column(Modifier.fillMaxWidth()) {
                             Text(
                                 text = item.mediaMetadata.title?.toString().orEmpty(),
-                                fontSize = 15.sp,
+                                fontSize = TvType.body.fontSize,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = item.mediaMetadata.artist?.toString().orEmpty(),
-                                fontSize = 13.sp,
+                                fontSize = TvType.callout.fontSize,
                                 color = androidx.compose.material3.LocalContentColor.current.copy(alpha = 0.66f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -1505,7 +1506,7 @@ private fun TvShareSheet(
             Text(
                 text = if (link == null) "Share Song" else title,
                 color = Color.White,
-                fontSize = 18.sp,
+                fontSize = TvType.headline.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1515,7 +1516,7 @@ private fun TvShareSheet(
                 Text(
                     text = "Anyone with this link can listen until it expires.",
                     color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 13.sp,
+                    fontSize = TvType.callout.fontSize,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
 
@@ -1548,14 +1549,14 @@ private fun TvShareSheet(
                     Text(
                         text = "Creating link…",
                         color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 13.sp
+                        fontSize = TvType.callout.fontSize
                     )
 
                 if (failed)
                     Text(
                         text = "This server cannot create share links.",
                         color = Color(0xFFFF8A80),
-                        fontSize = 13.sp
+                        fontSize = TvType.callout.fontSize
                     )
             } else {
                 ShareQr(
@@ -1568,7 +1569,7 @@ private fun TvShareSheet(
                 Text(
                     text = link.orEmpty(),
                     color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 12.sp,
+                    fontSize = TvType.callout.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
@@ -1578,7 +1579,7 @@ private fun TvShareSheet(
                 Text(
                     text = "Link expires in $lifetime",
                     color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 13.sp,
+                    fontSize = TvType.callout.fontSize,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1603,7 +1604,7 @@ private fun ShareQr(link: String, modifier: Modifier = Modifier) {
         Text(
             text = "This link is too long for a code.",
             color = Color.White.copy(alpha = 0.6f),
-            fontSize = 13.sp
+            fontSize = TvType.callout.fontSize
         )
         return
     }
@@ -1652,7 +1653,7 @@ private fun MoreSheetRow(
     ) {
         Text(
             text = label,
-            fontSize = 15.sp,
+            fontSize = TvType.body.fontSize,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.fillMaxWidth()
         )
@@ -1680,7 +1681,7 @@ private fun TvSleepTimerSheet(
             Text(
                 text = "Sleep timer",
                 color = Color.White,
-                fontSize = 18.sp,
+                fontSize = TvType.headline.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
@@ -1700,7 +1701,7 @@ private fun TvSleepTimerSheet(
                         focusedContentColor = Color.Black
                     )
                 ) {
-                    Text(text = "$minutes minutes", fontSize = 15.sp)
+                    Text(text = "$minutes minutes", fontSize = TvType.body.fontSize)
                 }
             }
 
@@ -1717,7 +1718,7 @@ private fun TvSleepTimerSheet(
                     focusedContentColor = Color.Black
                 )
             ) {
-                Text(text = "Turn off", fontSize = 15.sp)
+                Text(text = "Turn off", fontSize = TvType.body.fontSize)
             }
         }
     }
@@ -1796,7 +1797,7 @@ private fun TrackInfoCard(
         ) {
             Text(
                 text = metadata?.title?.toString().orEmpty(),
-                fontSize = 16.sp,
+                fontSize = TvType.body.fontSize,
                 fontWeight = FontWeight.Bold,
                 color = content,
                 maxLines = 1,
@@ -1808,7 +1809,7 @@ private fun TrackInfoCard(
                     metadata?.artist?.toString()?.takeIf { it.isNotBlank() },
                     metadata?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
                 ).joinToString(" – "),
-                fontSize = 14.sp,
+                fontSize = TvType.body.fontSize,
                 color = content.copy(alpha = 0.85f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1817,14 +1818,14 @@ private fun TrackInfoCard(
             if (durationMs > 0)
                 Text(
                     text = "$minutes min, $seconds secs",
-                    fontSize = 13.sp,
+                    fontSize = TvType.callout.fontSize,
                     color = content.copy(alpha = 0.7f)
                 )
 
             if (lossless)
                 Text(
                     text = "◐  Lossless",
-                    fontSize = 12.sp,
+                    fontSize = TvType.callout.fontSize,
                     fontWeight = FontWeight.Medium,
                     color = content,
                     modifier = Modifier
@@ -1858,7 +1859,7 @@ private fun TrackInfoCard(
                         focusedContentColor = Color.Black
                     )
                 ) {
-                    Text(text = "Go to Album", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Go to Album", fontSize = TvType.body.fontSize, fontWeight = FontWeight.Bold)
                 }
 
             if (artistId.isNotBlank())
@@ -1875,7 +1876,7 @@ private fun TrackInfoCard(
                         focusedContentColor = surface
                     )
                 ) {
-                    Text(text = "Go to Artist", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(text = "Go to Artist", fontSize = TvType.body.fontSize, fontWeight = FontWeight.Medium)
                 }
         }
     }

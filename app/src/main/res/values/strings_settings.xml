@@ -29,6 +29,10 @@
         <string name="appearance_lyrics_word_bounce">Lyrics Word Bounce</string>
         <string name="appearance_lyrics_animation_speed">Lyrics Animation Speed</string>
         <string name="appearance_more_info">Show More Info</string>
+        <string name="appearance_tv_text_size">Text Size</string>
+            <string name="tv_text_size_default">Default</string>
+            <string name="tv_text_size_large">Large</string>
+            <string name="tv_text_size_larger">Larger</string>
         <string name="appearance_apple_player_bar">Apple-Style Player Bar</string>
         <string name="appearance_classic_player_bar">Classic Player Bar</string>
         <string name="appearance_provider_logo">Show Provider Logo</string>

@@ -32,6 +32,14 @@ enum class AppTheme {
     LIGHT, DARK, SYSTEM
 }
 
+/**
+ * Dynamic Type for the TV. Android TV has no system font size setting, so the app
+ * offers the equivalent steps itself; the scale multiplies every sp value.
+ */
+enum class TvTextSize(val scale: Float) {
+    DEFAULT(1.0f), LARGE(1.15f), LARGER(1.3f)
+}
+
 @Singleton
 class AppearanceSettingsManager @Inject constructor(
     @ApplicationContext private val context: Context
@@ -58,6 +66,7 @@ class AppearanceSettingsManager @Inject constructor(
         private val CLASSIC_PLAYER_BAR = booleanPreferencesKey("classic_player_bar")
 
         private val OLED_PROTECTION_MODE = stringPreferencesKey("oled_protection")
+        private val TV_TEXT_SIZE = stringPreferencesKey("tv_text_size")
         private val DISABLE_SCREEN_STANDBY = booleanPreferencesKey("disable_screen_standby")
         private val ALBUM_DETAILS_BUTTONS = stringPreferencesKey("album_details_buttons")
         private val ARTIST_DETAILS_BUTTONS = stringPreferencesKey("artist_details_buttons")
@@ -414,6 +423,22 @@ class AppearanceSettingsManager @Inject constructor(
         withContext(NonCancellable) {
             context.dataStore.edit { preferences ->
                 preferences[OLED_PROTECTION_MODE] = mode.name
+            }
+        }
+    }
+
+    val tvTextSizeFlow: Flow<TvTextSize> = context.dataStore.data.map { preferences ->
+        try {
+            TvTextSize.valueOf(preferences[TV_TEXT_SIZE] ?: TvTextSize.DEFAULT.name)
+        } catch (ex: Exception) {
+            TvTextSize.DEFAULT
+        }
+    }
+
+    suspend fun setTvTextSize(size: TvTextSize) {
+        withContext(NonCancellable) {
+            context.dataStore.edit { preferences ->
+                preferences[TV_TEXT_SIZE] = size.name
             }
         }
     }
