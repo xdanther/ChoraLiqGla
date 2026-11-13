@@ -438,7 +438,8 @@ fun TvNowPlaying(
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val sideBySideLyrics = lyricsOpen && canShowLyrics
                     val coverSize = if (sideBySideLyrics) {
-                        minOf(maxWidth * 0.26f, maxHeight * 0.46f)
+                        if (appleLyrics) minOf(maxWidth * 0.30f, maxHeight * 0.58f)
+                        else minOf(maxWidth * 0.26f, maxHeight * 0.46f)
                     } else {
                         minOf(maxWidth * 0.28f, maxHeight * 0.50f)
                     }
@@ -472,35 +473,40 @@ fun TvNowPlaying(
                             ) {
                                 AlbumArtHero(metadata = metadata, size = coverSize)
 
-                                Spacer(Modifier.height(14.dp))
+                                // With the Apple lyric pane open the artwork stands on its
+                                // own: a title, artist and indicator next to a screen full of
+                                // lyric lines is just competing noise.
+                                if (!appleLyrics) {
+                                    Spacer(Modifier.height(14.dp))
 
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    PlayingIndicator(
-                                        color = iconTextColor,
-                                        mediaController = mediaController
-                                    )
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        PlayingIndicator(
+                                            color = iconTextColor,
+                                            mediaController = mediaController
+                                        )
+                                        Text(
+                                            text = metadata?.title?.toString().orEmpty(),
+                                            fontSize = 24.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = iconTextColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    Spacer(Modifier.height(4.dp))
+
                                     Text(
-                                        text = metadata?.title?.toString().orEmpty(),
-                                        fontSize = 24.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = iconTextColor,
+                                        text = metadata?.artist?.toString().orEmpty(),
+                                        fontSize = 15.sp,
+                                        color = iconTextColor.copy(alpha = 0.62f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-
-                                Spacer(Modifier.height(4.dp))
-
-                                Text(
-                                    text = metadata?.artist?.toString().orEmpty(),
-                                    fontSize = 15.sp,
-                                    color = iconTextColor.copy(alpha = 0.62f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
                             }
 
                             Spacer(Modifier.width(32.dp))

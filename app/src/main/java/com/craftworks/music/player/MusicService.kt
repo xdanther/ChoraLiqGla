@@ -308,6 +308,11 @@ class ChoraMediaLibraryService : MediaLibraryService() {
         )
 
         player = ExoPlayer.Builder(this)
+            // Without these the player has no seek step at all, so the remote's
+            // fast-forward and rewind keys arrive and do nothing while next and
+            // previous keep working.
+            .setSeekBackIncrementMs(10_000L)
+            .setSeekForwardIncrementMs(10_000L)
             .setSeekParameters(SeekParameters.EXACT)
             .setMediaSourceFactory(DefaultMediaSourceFactory(resolvingDataSourceFactory))
             .setWakeMode(
