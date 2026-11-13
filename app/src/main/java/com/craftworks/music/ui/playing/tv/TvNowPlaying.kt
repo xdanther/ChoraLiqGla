@@ -187,7 +187,6 @@ fun TvNowPlaying(
     var barFocusTicket by remember { mutableIntStateOf(0) }
     var focusBarOnShow by remember { mutableStateOf(false) }
     var barOwnsFocus by remember { mutableStateOf(false) }
-    var barHadFocus by remember { mutableStateOf(false) }
 
     // The bar is a visiting guest: it fades away again so the artwork stays the main thing.
     LaunchedEffect(barVisible, lastInteraction, infoOpen, queueOpen, moreOpen, shareOpen) {
@@ -263,7 +262,6 @@ fun TvNowPlaying(
     fun revealBar(focusBar: Boolean = false) {
         lastInteraction = System.nanoTime()
         focusBarOnShow = focusBar
-        barHadFocus = false
         barVisible = true
     }
 
@@ -289,15 +287,18 @@ fun TvNowPlaying(
                 // While a bar button holds focus the bar handles its own keys and the
                 // D-Pad is left alone, otherwise left/right seek instead of moving
                 // between Info and Lyrics.
+                // The info card replaces the bar, so Back belongs to it first
+                if (keyCode == KeyEvent.KEYCODE_BACK && infoOpen) {
+                    infoOpen = false
+                    barVisible = true
+                    barOwnsFocus = false
+                    barFocusTicket++
+                    return@onKeyEvent true
+                }
+
                 if (barVisible && barOwnsFocus) return@onKeyEvent false
 
                 when {
-                    keyCode == KeyEvent.KEYCODE_BACK && infoOpen -> {
-                        infoOpen = false
-                        barVisible = true
-                        barFocusTicket++
-                        true
-                    }
 
                     keyCode == KeyEvent.KEYCODE_BACK && lyricsOpen -> {
                         lyricsOpen = false
@@ -354,9 +355,9 @@ fun TvNowPlaying(
                         }
 
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            // Step back into the bar's buttons
+                            // Down is the way out of the bar, so it goes away with the focus
                             lastInteraction = System.nanoTime()
-                            barFocusTicket++
+                            barVisible = false
                             true
                         }
 
@@ -722,19 +723,9 @@ fun TvNowPlaying(
                 infoOpen = infoOpen,
                 infoFocus = barFocus,
                 pageFocus = pageFocus,
-                onBarFocusChanged = { hasFocus ->
-                    barOwnsFocus = hasFocus
-                    if (hasFocus) {
-                        barHadFocus = true
-                    } else if (barHadFocus &&
-                        !infoOpen && !queueOpen && !moreOpen && !shareOpen
-                    ) {
-                        // Only a real move away from the bar closes it; a bar that was
-                        // merely shown (by OK) never had focus and must stay on screen.
-                        barHadFocus = false
-                        barVisible = false
-                    }
-                },
+                // The bar is closed by Down or Back, never by a focus callback: moving
+                // between its own buttons briefly drops focus and used to close it.
+                onBarFocusChanged = { barOwnsFocus = it },
                 onDismiss = {
                     barVisible = false
                     barOwnsFocus = false
@@ -746,6 +737,7 @@ fun TvNowPlaying(
                 },
                 onToggleInfo = {
                     infoOpen = !infoOpen
+                    barOwnsFocus = false
                     lastInteraction = System.nanoTime()
                 },
                 onOpenQueue = { queueOpen = true },
@@ -888,8 +880,10 @@ private fun ApplePlayerBar(
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     onInteraction()
-                    // Only Back leaves the bar now: Up belongs to the scrubber above it
-                    if (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
+                    // Back and Down leave the bar; Up belongs to the scrubber above it,
+                    // which consumes Down itself to reach the row below.
+                    val code = keyEvent.nativeKeyEvent.keyCode
+                    if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_DPAD_DOWN) {
                         onDismiss()
                         return@onKeyEvent true
                     }
@@ -920,7 +914,6 @@ private fun ApplePlayerBar(
                     .border(1.dp, pillShade.copy(alpha = 0.28f), CircleShape)
                     .focusProperties {
                         up = progressFocus
-                        down = pageFocus
                     },
                 shape = ButtonDefaults.shape(shape = CircleShape),
                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
@@ -946,7 +939,6 @@ private fun ApplePlayerBar(
                 modifier = Modifier
                     .padding(end = 10.dp)
                     .focusProperties {
-                        down = pageFocus
                         up = FocusRequester.Cancel
                     },
                 onClick = onOpenQueue
@@ -960,7 +952,6 @@ private fun ApplePlayerBar(
                 modifier = Modifier
                     .padding(end = 10.dp)
                     .focusProperties {
-                        down = pageFocus
                         up = FocusRequester.Cancel
                     },
                 onClick = onOpenMore
@@ -1757,8 +1748,10 @@ private fun TrackInfoCard(
             format?.contains("ALAC") == true ||
             (bitrate ?: 0) >= 700
 
-    LaunchedEffect(albumId) {
-        if (albumId.isNotBlank()) runCatching { ctaFocus.requestFocus() }
+    LaunchedEffect(albumId, artistId) {
+        if (albumId.isNotBlank() || artistId.isNotBlank()) {
+            runCatching { ctaFocus.requestFocus() }
+        }
     }
 
     Row(
