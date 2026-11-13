@@ -939,16 +939,22 @@ private fun ApplePlayerBar(
     val shade = if (color.luminance() > 0.5f) Color.White else Color.Black
     var pillFocused by remember { mutableStateOf(false) }
 
+    // Which tier the remote is on. Down only leaves the bar from the bottom edge; from
+    // the actions above the timeline it has to travel down to it first, or the bar
+    // would vanish the moment the remote moved off the star.
+    var onBottomRow by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .onFocusChanged { if (!it.hasFocus) onBottomRow = false }
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     onInteraction()
-                    // Back and Down both leave the bar; everything else belongs to the
-                    // controls above.
                     val code = keyEvent.nativeKeyEvent.keyCode
-                    if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    val leaves = code == KeyEvent.KEYCODE_BACK ||
+                        (code == KeyEvent.KEYCODE_DPAD_DOWN && onBottomRow)
+                    if (leaves) {
                         onDismiss()
                         return@onKeyEvent true
                     }
@@ -996,7 +1002,9 @@ private fun ApplePlayerBar(
             TvPlayerTimeline(mediaController = mediaController, color = color)
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { onBottomRow = it.hasFocus },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Button(
