@@ -1,0 +1,281 @@
+# ChoraLiqGla — project notes
+
+## Goal
+
+An Android / Android TV client for Navidrome and Subsonic servers, with a mobile
+app and a separate 10-foot TV interface. The TV interface is being rebuilt to feel
+like Apple Music on Apple TV: black artwork-led canvas, colour taken from the
+cover, Apple TV type sizes and margins, a sidebar reached from the remote's Menu
+key, an Apple-style now-playing bar, synced lyrics, and an info card. Everything
+new must be an opt-in setting so no existing behaviour breaks.
+
+## Files
+
+### Root
+
+| File | What it is |
+| --- | --- |
+| `build.gradle.kts` | Root Gradle build; declares plugins (AGP, Kotlin, KSP, Hilt). |
+| `settings.gradle.kts` | Module list and repository config. |
+| `gradle.properties` | JVM args, AndroidX, Kotlin and build flags. |
+| `gradle/libs.versions.toml` | Version catalog for every dependency. |
+| `gradlew`, `gradlew.bat` | Gradle wrapper scripts. |
+| `local.properties` | Local SDK path (machine specific, not portable). |
+| `keystore.properties` | Release signing config, read by the app module. |
+| `signing/chora-release.jks` | The single release keystore every APK must be signed with. |
+| `.github/workflows/build.yml` | CI: JDK 21, writes the keystore, `assembleRelease`, uploads `chora-release` APK. |
+| `APPLE-MUSIC-TV-REFERENCE.md` | Design reference gathered for the tvOS look, with doc/observed/calculated labels. |
+| `README.md`, `LICENSE` | Project readme and licence. |
+| `fastlane/` | Store metadata and screenshots. |
+| `Gradle/`, `artifacts/` | Gradle support files; scratch artifacts (currently empty). |
+
+### App shell
+
+| File | What it is |
+| --- | --- |
+| `app/build.gradle.kts` | App module: Compose, Media3, Coil, Ktor/Ktorfit, Hilt, signing, `-PquickRelease`. |
+| `app/src/main/AndroidManifest.xml` | Activities, service, TV leanback/banner metadata, permissions. |
+| `Application.kt` | `ChoraApplication`, Hilt entry point and app-wide init. |
+| `MainActivity.kt` | Host activity, Compose root, bottom nav for phones, TV entry. |
+| `NavGraph.kt` | `SetupNavGraph`: every route in the app. |
+
+### Data models
+
+| File | What it is |
+| --- | --- |
+| `data/model/MediaModel.kt` | Core `Album` / `Artist` / `Song` / `Playlist` models and their `MediaItem` conversion. |
+| `data/model/Lyric.kt` | Lyrics, lines, words, roles, sync type and provider parsing. |
+| `data/model/MediaData.kt` | Music folders, gain info, playlist rules, album/artist info records. |
+| `data/model/MediaProviderData.kt` | Persisted provider configuration base class. |
+| `data/model/MediaQuery.kt` | Query objects for album/artist/song/playlist lists. |
+| `data/model/ProviderFeature.kt` | Capability flags a provider can advertise. |
+| `data/model/ProviderResponses.kt` | Auth, image, queue, tagging and user responses. |
+| `data/model/ProviderType.kt` | Subsonic / Navidrome / local provider kinds. |
+| `data/model/Screen.kt` | Route definitions and arguments. |
+| `data/model/SortOrder.kt` | Sort keys and orders per list type. |
+| `data/NavigationItems.kt` | Bottom-nav and sidebar item definitions. |
+| `data/di/DataSourceModule.kt` | Hilt module binding lyrics data sources. |
+
+### Media providers
+
+| File | What it is |
+| --- | --- |
+| `data/providers/media/MediaProvider.kt` | Abstract provider: every capability the UI can ask for, plus `createShareLink`. |
+| `data/providers/media/subsonic/SubsonicMediaProvider.kt` | Subsonic implementation of the provider contract. |
+| `data/providers/media/subsonic/SubsonicService.kt` | Ktorfit API surface: songs, albums, artists, playlists, star, shares. |
+| `data/providers/media/subsonic/SubsonicTypes.kt` | Subsonic JSON models including shares. |
+| `data/providers/media/navidrome/NavidromeMediaProvider.kt` | Navidrome provider, extends the Subsonic one. |
+| `data/providers/media/navidrome/NavidromeService.kt` | Navidrome REST endpoints (login, library, playlists). |
+| `data/providers/media/navidrome/NavidromeTypes.kt` | Navidrome JSON models. |
+| `data/providers/media/local/LocalMediaProvider.kt` | On-device files as a provider. |
+| `data/providers/media/local/LocalNormalizer.kt` | Normalises local tags into the shared models. |
+| `data/providers/media/local/LocalTypes.kt` | Local provider config. |
+| `data/providers/media/local/LocalUtils.kt` | File scanning and metadata helpers. |
+
+### Lyrics providers
+
+| File | What it is |
+| --- | --- |
+| `data/providers/lyrics/lrclib/LrclibDataSource.kt` | LRCLIB lookup with synced and plain lyrics. |
+| `data/providers/lyrics/lrcred/LrcRedDataSource.kt` | LrcRed lookup. |
+| `data/providers/lyrics/netease/NetEaseDataSource.kt` | NetEase search and lyric fetch. |
+| `data/providers/lyrics/unison/UnisonLyricsDataSource.kt` | Unison (self-hosted) lyrics source. |
+
+### Repositories and managers
+
+| File | What it is |
+| --- | --- |
+| `data/repository/AlbumRepository.kt` | Album list and detail lookups through the active provider. |
+| `data/repository/ArtistRepository.kt` | Artist list and detail lookups. |
+| `data/repository/LyricsRepository.kt` | Resolves lyrics across enabled providers; holds `LyricsState`. |
+| `data/repository/PlaylistRepository.kt` | Playlist CRUD and contents. |
+| `data/repository/RadioRepository.kt` | Internet radio stations. |
+| `data/repository/SongRepository.kt` | Song lookups, downloads, stream URLs. |
+| `data/repository/StarredRepository.kt` | Favourites add/remove. |
+| `managers/MediaProviderManager.kt` | Persists providers and exposes `currentProvider`. |
+| `managers/DataRefreshManager.kt` | Refreshes library data when providers change. |
+| `managers/MigrationManager.kt` | Runs data migrations at start-up. |
+| `managers/TranscodeManager.kt` | Transcoding preferences and stream decisions. |
+| `managers/settings/AppearanceSettingsManager.kt` | Theme, background style, lyric options, navbar/sidebar items. |
+| `managers/settings/PlaybackSettingsManager.kt` | Gapless, offload, audio settings. |
+| `managers/settings/MediaProviderSettingsManager.kt` | Provider-related settings. |
+| `managers/settings/LocalDataSettingsManager.kt` | Local storage settings. |
+| `managers/settings/MiscSettingsManager.kt` | Download templates and misc preferences. |
+| `migrations/Migration.kt` | Migration interface. |
+| `migrations/ProvidersRefactorMigration.kt` | Provider storage refactor migration. |
+
+### Playback
+
+| File | What it is |
+| --- | --- |
+| `player/MusicService.kt` | `ChoraMediaLibraryService`: ExoPlayer, media session, sleep timer, seek increments. |
+| `player/MediaController.kt` | `MediaControllerManager` plus `rememberManagedMediaController`. |
+| `player/SongHelper.kt` | Song-to-MediaItem helpers and playback conveniences. |
+
+### Phone UI
+
+| File | What it is |
+| --- | --- |
+| `ui/screens/HomeScreen.kt` | Phone home shelves. |
+| `ui/screens/HomeListsScreen.kt` | Recycled list screens for home categories. |
+| `ui/screens/AlbumScreen.kt`, `AlbumDetailsScreen.kt` | Album grid and album detail with track list. |
+| `ui/screens/ArtistsScreen.kt`, `ArtistDetailsScreen.kt` | Artist grid and artist detail. |
+| `ui/screens/PlaylistScreen.kt`, `PlaylistDetailsScreen.kt` | Playlist list and contents. |
+| `ui/screens/RadioScreen.kt` | Internet radio. |
+| `ui/screens/SongsScreen.kt` | All songs, paginated. |
+| `ui/screens/SettingScreen.kt` | Settings hub for phones. |
+| `ui/screens/settings/SettingsAppearance.kt` | Phone appearance settings page. |
+| `ui/screens/settings/SettingsPlayback.kt` | Phone playback settings page. |
+| `ui/screens/settings/SettingsProviders.kt` | Phone provider settings page. |
+| `ui/screens/settings/SettingsLyricsProviders.kt` | Phone lyrics provider settings page. |
+| `ui/screens/settings/SettingsMisc.kt` | Phone misc settings page. |
+| `ui/screens/settings/SettingsItems.kt` | Shared phone settings rows (switch, dialog button, slider). |
+| `ui/viewmodels/HomeScreenViewModel.kt` | Home shelves data. |
+| `ui/viewmodels/AlbumScreenViewModel.kt` | Album grid data. |
+| `ui/viewmodels/AlbumDetailsViewModel.kt` | Album detail and tracks. |
+| `ui/viewmodels/ArtistsScreenViewModel.kt` | Artist grid data. |
+| `ui/viewmodels/PlaylistScreenViewModel.kt` | Playlist list data. |
+| `ui/viewmodels/RadioScreenViewModel.kt` | Radio station data. |
+| `ui/viewmodels/SongsScreenViewModel.kt` | Paged song list data. |
+
+### TV UI
+
+| File | What it is |
+| --- | --- |
+| `ui/screens/tv/TvHomeScreen.kt` | TV home: hero row, shelves, sidebar entry. |
+| `ui/screens/tv/TvAlbumScreen.kt` | TV album grid. |
+| `ui/screens/tv/TvAlbumDetailsScreen.kt` | TV album page: cover, track rows, `•••` options sheet. |
+| `ui/screens/tv/TvArtistScreen.kt`, `TvArtistDetailsScreen.kt` | TV artist grid and detail. |
+| `ui/screens/tv/TvPlaylistScreen.kt`, `TvPlaylistDetailsScreen.kt` | TV playlists and contents. |
+| `ui/screens/tv/TvRadioScreen.kt` | TV internet radio. |
+| `ui/screens/tv/TvSongsScreen.kt` | TV all-songs list. |
+| `ui/screens/tv/TvSearchScreen.kt` | TV search. |
+| `ui/screens/tv/TvSettingScreen.kt` | TV settings hub. |
+| `ui/screens/tv/settings/TvSettingsAppearance.kt` | TV appearance settings page. |
+| `ui/screens/tv/settings/TvSettingsPlayback.kt` | TV playback settings page. |
+| `ui/screens/tv/settings/TvSettingsProviders.kt` | TV provider settings page. |
+| `ui/screens/tv/settings/TvSettingsItems.kt` | Shared TV settings rows (button, switch). |
+| `ui/elements/tv/TvSidebar.kt` | Sidebar panel: frosted card, slide/fade, focus scale, panel-only blur, clock. |
+| `ui/elements/tv/TvAlbumCard.kt` | Focusable square album tile with caption. |
+| `ui/elements/tv/TvArtistCard.kt`, `TvPlaylistCard.kt`, `TvRadioCard.kt`, `TvSongCard.kt`, `TvProviderCard.kt` | Focusable cards for each content type. |
+| `ui/elements/tv/TvPageTitle.kt` | Destination title above a TV list. |
+| `ui/elements/dialogs/tv/OnboardingDialog.kt` | TV first-run onboarding. |
+| `ui/elements/dialogs/tv/AppearanceDialogs.kt` | TV theme, background, alignment, OLED and navbar dialogs. |
+| `ui/elements/dialogs/tv/Dialogs.kt` | Shared TV dialog scaffolding. |
+| `ui/elements/dialogs/tv/PlaybackDialogs.kt` | TV transcoding dialogs. |
+| `ui/elements/dialogs/tv/PlaylistDialogs.kt` | TV playlist deletion confirmation. |
+| `ui/elements/dialogs/tv/RadioDialogs.kt` | TV add/edit radio station. |
+| `ui/elements/dialogs/tv/SongDialogs.kt` | TV song action menu, playlist add, rating. |
+| `ui/elements/dialogs/tv/provider/SelectProviderType.kt` | Provider type picker. |
+| `ui/elements/dialogs/tv/provider/TvCreateMediaProviderDialog.kt` | Provider creation entry. |
+| `ui/elements/dialogs/tv/provider/CreateSubsonicProviderDialog.kt` | Subsonic/Navidrome setup wizard. |
+| `ui/elements/dialogs/tv/provider/CreateLocalProviderDialog.kt` | Local provider setup. |
+| `ui/elements/dialogs/tv/provider/ModifyLrcLibProviderDialog.kt` | LRCLIB provider URL edit. |
+| `ui/playing/tv/TvNowPlaying.kt` | The TV player: background wash, artwork, lyrics pane, bar, info card, queue/more/share sheets. |
+| `ui/playing/tv/NowPlayingElements.kt` | TV transport controls (progress, buttons). |
+
+### Player (shared)
+
+| File | What it is |
+| --- | --- |
+| `ui/playing/NowPlaying.kt` | Hosts the player, picks TV/landscape/portrait, passes palette colours. |
+| `ui/playing/NowPlayingViewModel.kt` | Now-playing state, palette extraction, downloads, lyrics refresh. |
+| `ui/playing/NowPlayingBackground.kt` | Background style enum and the shared background layer. |
+| `ui/playing/NowPlayingLyrics.kt` | Shared lyrics view, blur and timing helpers. |
+| `ui/playing/NowPlayingElements.kt` | Phone playback controls. |
+| `ui/playing/NowPlayingPortrait.kt`, `NowPlayingLandscape.kt` | Phone layouts. |
+| `ui/playing/NowPlayingMiniPlayer.kt` | Mini player. |
+| `ui/playing/NowPlayingDetails.kt` | Song details panel. |
+| `ui/playing/PlayQueue.kt` | Queue view. |
+| `ui/playing/background/Plain.kt`, `StaticBlur.kt`, `AnimatedGradient.kt` | Background implementations. |
+| `ui/playing/lyrics/InterludeIndicator.kt`, `SyncedLyricItem.kt`, `WordSyncedLyricItem.kt` | Lyric line and word animation. |
+
+### Shared elements and theme
+
+| File | What it is |
+| --- | --- |
+| `ui/elements/AlbumCard.kt`, `ArtistCard.kt`, `PlaylistCard.kt`, `RadioCard.kt`, `SongCard.kt`, `ProviderCard.kt`, `GenrePill.kt` | Phone/sidebar cards. |
+| `ui/elements/SongLazyLists.kt` | Grid/row builders for songs, albums, artists, playlists. |
+| `ui/elements/SongListActionButtons.kt` | Action buttons above song lists. |
+| `ui/elements/ButtonAnimation.kt`, `RefreshRipple.kt`, `VerticalText.kt` | Focus/press animations, ripple shader, vertical text modifier. |
+| `ui/elements/TopBarWithSearch.kt` | Top bar with search field. |
+| `ui/elements/dialogs/OnboardingDialog.kt` | First-run onboarding steps. |
+| `ui/elements/dialogs/RatingDialog.kt` | Star rating dialog. |
+| `ui/elements/dialogs/RadioDialogs.kt` | Add and edit radio stations. |
+| `ui/elements/dialogs/PlaybackDialogs.kt` | Transcoding preview and format/bitrate dialogs. |
+| `ui/elements/dialogs/PlaylistDialogs.kt` | Add to, create and delete playlists. |
+| `ui/elements/dialogs/MiscDialogs.kt` | Download template and misc dialogs. |
+| `ui/elements/dialogs/ProviderDialogs.kt` | Provider creation, edit and empty-state dialogs. |
+| `ui/elements/dialogs/dialogFocusable.kt` | Modifier that makes a dialog a focus group. |
+| `ui/elements/dialogs/appearance/BackgroundDialog.kt` | Background style picker. |
+| `ui/elements/dialogs/appearance/HomeItemsDialog.kt` | Home shelf picker. |
+| `ui/elements/dialogs/appearance/NavbarItemsDialog.kt` | Bottom nav / sidebar item picker. |
+| `ui/elements/dialogs/appearance/NowPlayingTitleAlignmentDialog.kt` | Now-playing text alignment picker. |
+| `ui/elements/dialogs/appearance/ThemeDialog.kt` | Theme picker. |
+| `ui/elements/dialogs/appearance/NameDialog.kt` | Rename dialog. |
+| `ui/elements/dialogs/appearance/SongListActionButtonsDialog.kt` | Reorderable song-list action button editor. |
+| `ui/theme/Color.kt`, `Type.kt`, `Theme.kt` | Colour palette, typography, `MusicPlayerTheme`. |
+
+### Utilities
+
+| File | What it is |
+| --- | --- |
+| `util/QrCode.kt` | Self-contained QR encoder (byte mode, versions 1-10) used for share codes. |
+| `utils/LyricsUtils.kt` | Lyric text splitting, background vocals, timestamp parsing. |
+| `utils/TtmlParser.kt` | Apple TTML lyric parsing. |
+| `utils/ModifierUtils.kt` | Marquee, fading edges and other modifiers. |
+| `utils/PagingUtils.kt`, `StringUtils.kt` | Paging helpers, duration/format strings. |
+| `utils/CryptoData.kt`, `EncryptedMediaProviderSerializer.kt` | Encrypted provider config storage. |
+
+### Resources
+
+| Path | What it is |
+| --- | --- |
+| `res/values/` | Strings (English), colours, themes, arrays. |
+| `res/values-de/es/fr/it/ru/zh-rCN/` | Translations of strings, colours and arrays. |
+| `res/drawable/` | 72 vector icons (nav, playback, lyrics, queue, share, more, etc.). |
+| `res/drawable-*/` | Density-specific assets. |
+| `res/mipmap-*/` | Launcher and TV banner icons. |
+| `res/xml/` | TV attributes, backup rules, data extraction rules. |
+
+## Status
+
+- The app builds as a release APK in CI; signing is unified on `signing/chora-release.jks`.
+- TV player has been rebuilt around the Apple TV reference: 28% cover, 24sp title,
+  15sp artist, 40dp side and 30dp vertical margins, 38dp glass circle buttons,
+  full-width scrubber, Info pill, queue/more/lyrics actions, info card with two
+  rounded actions, share-as-QR, palette-blob wash, lyrics with blurred backdrop.
+- Last completed: bar closes only on Down/Back; Back closes the info card; Up from
+  every bar button reaches the scrubber; untimed lyrics spread across the track;
+  10 s seek increments so the remote's FF/REW work; QR share flow.
+- Verification: none of the player work has been run on a device or emulator.
+  Local Gradle can no longer resolve the Android plugin offline, so every change
+  since `ac42161` is only proven by CI (or by the one error CI reported at `b6a1ae7`).
+- Known gap: `onGoToArtist` is accepted by the player but `NowPlaying` passes the
+  default no-op, so Go to Artist appears without navigating.
+
+## Decisions
+
+- New TV behaviour ships as settings, never as a replacement for existing options.
+- Apple lyric pane is opt-in (`appleTvLyrics`); the shared `LyricsView` stays default.
+- Sidebar is settings-driven (`bottomNavItemsFlow`), opened by Menu/Back on Home,
+  never by the player.
+- Background wash: drifting palette blobs (commit `1366514`). Rejected: blurred
+  cover copies (looks like smeared artwork) and an AGSL domain-warped shader.
+- Info card replaces the bar in place, and Back restores the bar.
+- Bar surfaces are translucent glass of the player's ink with a hairline outline.
+- Shares use the server's `createShare` with an expiry, encoded by the in-repo QR
+  encoder (verified decodable with OpenCV).
+- Type and spacing follow Apple's 1920x1080 point grid, so 1 pt = 0.5 dp here.
+- Never run a local Gradle build; CI builds. Only `compileReleaseKotlin --offline`
+  was ever allowed locally, and that no longer resolves.
+
+## Next steps
+
+1. Confirm CI run for `2579543` is green, then install and walk the player: bar
+   focus, Down/Back, info card, lyrics, share.
+2. Wire `onGoToArtist` in `NowPlaying.kt` to the artist route.
+3. Re-check the wash and lyrics backdrop against the reference photos on a TV.
+4. Add queue/more/share to the phone player so the features are not TV-only.
+5. Remove now-unused leftovers (`insertAfterCurrent`, `appendToQueue`,
+   `TvSleepTimerSheet` triggers, `downloadSong` on the TV bar).
