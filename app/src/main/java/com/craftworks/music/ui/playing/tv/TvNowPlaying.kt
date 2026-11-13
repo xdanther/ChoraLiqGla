@@ -178,6 +178,7 @@ fun TvNowPlaying(
     var shareOpen by remember { mutableStateOf(false) }
 
     val sheetAlbumId = metadata?.extras?.getString("albumId").orEmpty()
+    val sheetArtistId = metadata?.extras?.getString("artistId").orEmpty()
     val sheetSongId = metadata?.extras?.getString("id").orEmpty()
     var lyricsOpen by remember { mutableStateOf(false) }
     var sleepTimerOpen by remember { mutableStateOf(false) }
@@ -197,7 +198,11 @@ fun TvNowPlaying(
     val classicBarFocus = remember { FocusRequester() }
     var barFocusTicket by remember { mutableIntStateOf(0) }
     var focusBarOnShow by remember { mutableStateOf(false) }
-    var barOwnsFocus by remember { mutableStateOf(false) }
+    val railFocus = remember { FocusRequester() }
+
+    // Whether the page itself, rather than one of its buttons, is holding the remote.
+    // The page only takes arrows while this is true, so a bar button always wins.
+    var pageFocused by remember { mutableStateOf(true) }
 
     // The bar is a visiting guest: it fades away again so the artwork stays the main thing.
     LaunchedEffect(barVisible, lastInteraction, infoOpen, queueOpen, moreOpen, shareOpen) {
@@ -223,7 +228,29 @@ fun TvNowPlaying(
                 delay(40)
             }
         } else {
-            pageFocus.requestFocusSafely()
+            repeat(10) {
+                if (pageFocus.requestFocusSafely()) return@LaunchedEffect
+                delay(40)
+            }
+        }
+    }
+
+    // A sheet takes the remote with it when it closes, leaving nothing focused and a
+    // page that has to keep working. Hand the remote back to whatever is still on
+    // screen: the bar if it is up, the page otherwise.
+    LaunchedEffect(infoOpen, queueOpen, moreOpen, shareOpen, sleepTimerOpen) {
+        if (infoOpen || queueOpen || moreOpen || shareOpen || sleepTimerOpen) return@LaunchedEffect
+        delay(200)
+        if (barVisible) {
+            repeat(10) {
+                if (barFocus.requestFocusSafely()) return@LaunchedEffect
+                delay(40)
+            }
+        } else {
+            repeat(10) {
+                if (pageFocus.requestFocusSafely()) return@LaunchedEffect
+                delay(40)
+            }
         }
     }
 
@@ -292,26 +319,29 @@ fun TvNowPlaying(
             )
             .focusRequester(pageFocus)
             .focusable(true)
+            .onFocusChanged { pageFocused = it.isFocused }
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type != KeyEventType.KeyDown) return@onKeyEvent false
                 val keyCode = keyEvent.nativeKeyEvent.keyCode
 
-                // While a bar button holds focus the bar handles its own keys and the
-                // D-Pad is left alone, otherwise left/right seek instead of moving
-                // between Info and Lyrics.
+                // A bar or rail button holds the remote: the D-Pad belongs to it. The
+                // page used to keep handling arrows after the bar appeared, which is
+                // what left the remote stuck on the bar instead of moving through it.
+                // When nothing with buttons is showing the page takes the keys anyway,
+                // so losing focus can never leave the player deaf to the remote.
+                val controlsShowing = barVisible || infoOpen || queueOpen || moreOpen ||
+                    shareOpen || sleepTimerOpen
+                if (!pageFocused && controlsShowing) return@onKeyEvent false
+
                 // The info card replaces the bar, so Back belongs to it first
                 if (keyCode == KeyEvent.KEYCODE_BACK && infoOpen) {
                     infoOpen = false
                     barVisible = true
-                    barOwnsFocus = false
                     barFocusTicket++
                     return@onKeyEvent true
                 }
 
-                if (barVisible && barOwnsFocus) return@onKeyEvent false
-
                 when {
-
                     keyCode == KeyEvent.KEYCODE_BACK && lyricsOpen -> {
                         lyricsOpen = false
                         true
@@ -323,7 +353,7 @@ fun TvNowPlaying(
                         true
                     }
 
-                    // Nothing on screen yet: the DPAD itself drives playback.
+                    // Nothing on screen yet: the D-Pad itself drives playback.
                     !barVisible -> when (keyCode) {
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
                             mediaController?.seekBack()
@@ -357,9 +387,8 @@ fun TvNowPlaying(
                         else -> false
                     }
 
-                    // Bar is up but the page still owns the focus.
+                    // The bar is up but the page still holds the remote.
                     else -> when (keyCode) {
-                        // UP moves the selection back into the bar instead of hiding it
                         KeyEvent.KEYCODE_DPAD_UP -> {
                             lastInteraction = System.nanoTime()
                             barFocusTicket++
@@ -367,7 +396,6 @@ fun TvNowPlaying(
                         }
 
                         KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            // Down is the way out of the bar, so it goes away with the focus
                             lastInteraction = System.nanoTime()
                             barVisible = false
                             true
@@ -715,7 +743,36 @@ fun TvNowPlaying(
                 }
             )
 
-        // The bar only exists while the remote is in use
+        // The options: a column of glass circles down the right edge, above the bar.
+        AnimatedVisibility(
+            visible = barVisible && showAppleBar && !infoOpen,
+            enter = fadeIn(tween(durationMillis = 220)),
+            exit = fadeOut(tween(durationMillis = 200)),
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 40.dp, bottom = 150.dp)
+        ) {
+            TvOptionsRail(
+                colour = iconTextColor,
+                railFocus = railFocus,
+                hasAlbum = sheetAlbumId.isNotBlank(),
+                hasArtist = sheetArtistId.isNotBlank(),
+                onGoToAlbum = onGoToAlbum,
+                onGoToArtist = onGoToArtist,
+                onOpenQueue = { queueOpen = true },
+                onShare = { shareOpen = true },
+                onSleepTimer = { sleepTimerOpen = true },
+                onOpenMore = { moreOpen = true },
+                onDismiss = {
+                    barVisible = false
+                    pageFocus.requestFocusSafely()
+                },
+                onInteraction = { lastInteraction = System.nanoTime() }
+            )
+        }
+
+        // The player bar: Info, the transport and Lyrics on one line along the bottom,
+        // the way the tvOS player reads from left to right.
         AnimatedVisibility(
             visible = barVisible && showAppleBar && !infoOpen,
             enter = fadeIn(tween(durationMillis = 300)) + slideInVertically(
@@ -739,15 +796,10 @@ fun TvNowPlaying(
                 isRadio = isRadio,
                 canShowLyrics = canShowLyrics,
                 lyricsOpen = lyricsOpen,
-                infoOpen = infoOpen,
-                infoFocus = barFocus,
-                pageFocus = pageFocus,
-                // The bar is closed by Down or Back, never by a focus callback: moving
-                // between its own buttons briefly drops focus and used to close it.
-                onBarFocusChanged = { barOwnsFocus = it },
+                playFocus = barFocus,
+                railFocus = railFocus,
                 onDismiss = {
                     barVisible = false
-                    barOwnsFocus = false
                     pageFocus.requestFocusSafely()
                 },
                 onToggleLyrics = {
@@ -756,17 +808,8 @@ fun TvNowPlaying(
                 },
                 onToggleInfo = {
                     infoOpen = !infoOpen
-                    barOwnsFocus = false
                     lastInteraction = System.nanoTime()
                 },
-                onOpenQueue = { queueOpen = true },
-                onOpenMore = { moreOpen = true },
-                hasAlbum = sheetAlbumId.isNotBlank(),
-                hasArtist = metadata?.extras?.getString("artistId").orEmpty().isNotBlank(),
-                onGoToAlbum = onGoToAlbum,
-                onGoToArtist = onGoToArtist,
-                onShare = { shareOpen = true },
-                onSleepTimer = { sleepTimerOpen = true },
                 onInteraction = { lastInteraction = System.nanoTime() }
             )
         }
@@ -875,8 +918,12 @@ fun TvNowPlaying(
 }
 
 /**
- * Apple's bar: the skip/lyrics circles above a full-width scrubber, and an Info pill
- * in the bottom-left corner.
+ * The tvOS player bar: Info on the left, the transport in the middle, Lyrics on the
+ * right, on one line along the bottom edge.
+ *
+ * The scrubber above it is a readout rather than a focus target, so the remote can
+ * never end up parked on it, and Up leaves the row for the options rail on the right
+ * instead of wandering off into nothing.
  */
 @Composable
 private fun ApplePlayerBar(
@@ -885,34 +932,21 @@ private fun ApplePlayerBar(
     isRadio: Boolean,
     canShowLyrics: Boolean,
     lyricsOpen: Boolean,
-    infoOpen: Boolean,
-    infoFocus: FocusRequester,
-    pageFocus: FocusRequester,
-    onBarFocusChanged: (Boolean) -> Unit,
+    playFocus: FocusRequester,
+    railFocus: FocusRequester,
     onDismiss: () -> Unit,
     onToggleLyrics: () -> Unit,
     onToggleInfo: () -> Unit,
-    onOpenQueue: () -> Unit,
-    onOpenMore: () -> Unit,
-    hasAlbum: Boolean,
-    hasArtist: Boolean,
-    onGoToAlbum: () -> Unit,
-    onGoToArtist: () -> Unit,
-    onShare: () -> Unit,
-    onSleepTimer: () -> Unit,
     onInteraction: () -> Unit
 ) {
-    val progressFocus = remember { FocusRequester() }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { onBarFocusChanged(it.hasFocus) }
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     onInteraction()
-                    // Back and Down leave the bar; Up belongs to the scrubber above it,
-                    // which consumes Down itself to reach the row below.
+                    // Back and Down both leave the bar; everything else belongs to its
+                    // buttons.
                     val code = keyEvent.nativeKeyEvent.keyCode
                     if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_DPAD_DOWN) {
                         onDismiss()
@@ -921,131 +955,198 @@ private fun ApplePlayerBar(
                 }
                 false
             },
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (!isRadio)
-            TvPlaybackProgress(
-                mediaController = mediaController,
-                color = color,
-                focusRequester = progressFocus,
-                onDismiss = onDismiss
-            )
+            TvPlaybackProgress(mediaController = mediaController, color = color)
 
-        // The third bar: the work that used to hide behind a tray, as glass circles on
-        // the right of their own row, directly above the player bar.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (hasAlbum && !isRadio)
+            // Equal side slots keep the transport exactly centred whatever sits in them.
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                val pillShade = if (color.luminance() > 0.5f) Color.White else Color.Black
+                var pillFocused by remember { mutableStateOf(false) }
+
+                Button(
+                    onClick = onToggleInfo,
+                    modifier = Modifier
+                        .onFocusChanged { pillFocused = it.hasFocus }
+                        .glassRim(CircleShape, focused = pillFocused, strength = 0.85f)
+                        .focusProperties { up = railFocus },
+                    shape = ButtonDefaults.shape(shape = CircleShape),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                    colors = ButtonDefaults.colors(
+                        containerColor = pillShade.copy(alpha = 0.14f),
+                        disabledContainerColor = pillShade.copy(alpha = 0.10f),
+                        contentColor = color,
+                        disabledContentColor = color.copy(alpha = 0.3f),
+                        focusedContainerColor = pillShade.copy(alpha = 0.38f),
+                        focusedContentColor = color
+                    )
+                ) {
+                    Text(text = "Info", fontSize = TvType.callout.fontSize, fontWeight = FontWeight.Medium)
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 BarCircleButton(
-                    icon = R.drawable.rounded_library_music_24,
-                    contentDescription = "Go to Album",
+                    icon = R.drawable.rounded_skip_previous_24,
+                    contentDescription = "Previous",
                     active = false,
                     tint = color,
-                    modifier = Modifier.padding(end = 8.dp),
-                    onClick = onGoToAlbum
+                    size = 44.dp,
+                    modifier = Modifier.focusProperties { up = railFocus },
+                    onClick = {
+                        mediaController?.seekToPreviousMediaItem()
+                        onInteraction()
+                    }
                 )
 
-            if (hasArtist && !isRadio)
+                Spacer(Modifier.width(12.dp))
+
+                TransportPlayButton(
+                    mediaController = mediaController,
+                    color = color,
+                    focus = playFocus,
+                    railFocus = railFocus,
+                    onInteraction = onInteraction
+                )
+
+                Spacer(Modifier.width(12.dp))
+
                 BarCircleButton(
-                    icon = R.drawable.rounded_artist_24,
-                    contentDescription = "Go to Artist",
+                    icon = R.drawable.rounded_skip_next_24,
+                    contentDescription = "Next",
                     active = false,
                     tint = color,
-                    modifier = Modifier.padding(end = 8.dp),
-                    onClick = onGoToArtist
+                    size = 44.dp,
+                    modifier = Modifier.focusProperties { up = railFocus },
+                    onClick = {
+                        mediaController?.seekToNextMediaItem()
+                        onInteraction()
+                    }
                 )
+            }
 
-            BarCircleButton(
-                icon = R.drawable.rounded_share_24,
-                contentDescription = "Share",
-                active = false,
-                tint = color,
-                modifier = Modifier.padding(end = 8.dp),
-                onClick = onShare
-            )
-
-            BarCircleButton(
-                icon = R.drawable.rounded_timer_24,
-                contentDescription = "Sleep timer",
-                active = false,
-                tint = color,
-                onClick = onSleepTimer
-            )
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                // The slot is kept when a track has no lyrics so the transport never
+                // shifts sideways between songs.
+                if (canShowLyrics) {
+                    BarCircleButton(
+                        icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
+                        contentDescription = "Lyrics",
+                        active = lyricsOpen,
+                        tint = color,
+                        size = 44.dp,
+                        modifier = Modifier.focusProperties { up = railFocus },
+                        onClick = onToggleLyrics
+                    )
+                } else {
+                    Spacer(Modifier.size(44.dp))
+                }
+            }
         }
+    }
+}
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val pillShade = if (color.luminance() > 0.5f) Color.White else Color.Black
-            var pillFocused by remember { mutableStateOf(false) }
+/** Play and pause as one button, drawn from the player's own state. */
+@Composable
+private fun TransportPlayButton(
+    mediaController: MediaController?,
+    color: Color,
+    focus: FocusRequester,
+    railFocus: FocusRequester,
+    onInteraction: () -> Unit
+) {
+    var playing by remember { mutableStateOf(mediaController?.isPlaying == true) }
 
-            Button(
-                onClick = onToggleInfo,
-                modifier = Modifier
-                    .focusRequester(infoFocus)
-                    .onFocusChanged { pillFocused = it.hasFocus }
-                    .glassRim(CircleShape, focused = pillFocused, strength = 0.85f)
-                    .focusProperties {
-                        up = progressFocus
-                    },
-                shape = ButtonDefaults.shape(shape = CircleShape),
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-                colors = ButtonDefaults.colors(
-                    containerColor = pillShade.copy(alpha = 0.14f),
-                    disabledContainerColor = pillShade.copy(alpha = 0.10f),
-                    contentColor = color,
-                    disabledContentColor = color.copy(alpha = 0.3f),
-                    focusedContainerColor = pillShade.copy(alpha = 0.38f),
-                    focusedContentColor = color
-                )
-            ) {
-                Text(text = "Info", fontSize = TvType.callout.fontSize, fontWeight = FontWeight.Medium)
+    DisposableEffect(mediaController) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playing = isPlaying
             }
+        }
+        mediaController?.addListener(listener)
+        playing = mediaController?.isPlaying == true
+        onDispose { mediaController?.removeListener(listener) }
+    }
 
-            Spacer(Modifier.weight(1f))
+    BarCircleButton(
+        icon = if (playing) R.drawable.rounded_pause_24 else R.drawable.rounded_play_24,
+        contentDescription = if (playing) "Pause" else "Play",
+        active = false,
+        tint = color,
+        size = 52.dp,
+        iconSize = 24.dp,
+        modifier = Modifier
+            .focusRequester(focus)
+            .focusProperties { up = railFocus },
+        onClick = {
+            mediaController.togglePlayback()
+            onInteraction()
+        }
+    )
+}
 
+/**
+ * The options rail: everything that is not the transport, as a column of circles down
+ * the right edge. Push Up from the bar to reach it, Down or Back to leave.
+ */
+@Composable
+private fun TvOptionsRail(
+    colour: Color,
+    railFocus: FocusRequester,
+    hasAlbum: Boolean,
+    hasArtist: Boolean,
+    onGoToAlbum: () -> Unit,
+    onGoToArtist: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onShare: () -> Unit,
+    onSleepTimer: () -> Unit,
+    onOpenMore: () -> Unit,
+    onDismiss: () -> Unit,
+    onInteraction: () -> Unit
+) {
+    val items = buildList {
+        if (hasAlbum) add(Triple(R.drawable.rounded_library_music_24, "Go to Album", onGoToAlbum))
+        if (hasArtist) add(Triple(R.drawable.rounded_artist_24, "Go to Artist", onGoToArtist))
+        add(Triple(R.drawable.rounded_queue_music_24, "Queue", onOpenQueue))
+        add(Triple(R.drawable.rounded_share_24, "Share", onShare))
+        add(Triple(R.drawable.rounded_timer_24, "Sleep timer", onSleepTimer))
+        add(Triple(R.drawable.rounded_more_horiz_24, "More", onOpenMore))
+    }
+
+    Column(
+        modifier = Modifier
+            .focusGroup()
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    onInteraction()
+                    if (event.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
+                        onDismiss()
+                        return@onKeyEvent true
+                    }
+                }
+                false
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items.forEachIndexed { index, item ->
             BarCircleButton(
-                icon = R.drawable.rounded_queue_music_24,
-                tint = color,
-                contentDescription = "Queue",
+                icon = item.first,
+                contentDescription = item.second,
                 active = false,
-                modifier = Modifier
-                    .padding(end = 10.dp)
-                    .focusProperties {
-                        up = progressFocus
-                    },
-                onClick = onOpenQueue
+                tint = colour,
+                size = 44.dp,
+                modifier = if (index == 0) Modifier.focusRequester(railFocus) else Modifier,
+                onClick = {
+                    onInteraction()
+                    item.third()
+                }
             )
-
-            BarCircleButton(
-                icon = R.drawable.rounded_more_horiz_24,
-                tint = color,
-                contentDescription = "More",
-                active = false,
-                modifier = Modifier
-                    .padding(end = 10.dp)
-                    .focusProperties {
-                        up = progressFocus
-                    },
-                onClick = onOpenMore
-            )
-
-            if (canShowLyrics) {
-                BarCircleButton(
-                    tint = color,
-                    icon = if (lyricsOpen) R.drawable.lyrics_active else R.drawable.lyrics_inactive,
-                    contentDescription = "Lyrics",
-                    active = lyricsOpen,
-                    modifier = Modifier.focusProperties {
-                        up = progressFocus
-                    },
-                    onClick = onToggleLyrics
-                )
-            }
         }
     }
 }
@@ -1057,6 +1158,8 @@ private fun BarCircleButton(
     active: Boolean,
     tint: Color,
     modifier: Modifier = Modifier,
+    size: Dp = 38.dp,
+    iconSize: Dp = 18.dp,
     onClick: () -> Unit
 ) {
     // Liquid glass: a translucent shade of the player's own ink inside a hairline
@@ -1067,7 +1170,7 @@ private fun BarCircleButton(
     Button(
         onClick = onClick,
         modifier = modifier
-            .size(38.dp)
+            .size(size)
             .onFocusChanged { focused = it.hasFocus }
             .glassRim(CircleShape, focused = focused, strength = 0.9f),
         shape = ButtonDefaults.shape(shape = CircleShape),
@@ -1084,7 +1187,7 @@ private fun BarCircleButton(
         Icon(
             painter = painterResource(icon),
             contentDescription = contentDescription,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(iconSize)
         )
     }
 }
