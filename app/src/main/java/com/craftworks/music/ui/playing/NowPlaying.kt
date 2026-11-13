@@ -74,7 +74,9 @@ fun NowPlayingContent(
     val isTv = LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK ==
         Configuration.UI_MODE_TYPE_TELEVISION
 
-    val isSystemDark = if (oledProtectionMode != OLEDProtectionMode.OFF) true
+    // A TV is always a dark surface: its uiMode never sets the night bit, so trusting
+    // isSystemInDarkTheme() there would fall back to the light artwork colours.
+    val isSystemDark = if (oledProtectionMode != OLEDProtectionMode.OFF || isTv) true
         else isSystemInDarkTheme()
 
     LaunchedEffect(metadata?.artworkUri, backgroundStyle) {
