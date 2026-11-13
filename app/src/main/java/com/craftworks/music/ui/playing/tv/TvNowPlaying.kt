@@ -121,6 +121,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.craftworks.music.R
 import com.craftworks.music.data.model.SyncedWord
+import com.craftworks.music.data.model.artists
 import com.craftworks.music.data.model.favorite
 import com.craftworks.music.data.model.id
 import com.craftworks.music.data.model.providerId
@@ -183,6 +184,12 @@ fun TvNowPlaying(
     var shareOpen by remember { mutableStateOf(false) }
 
     val sheetAlbumId = metadata?.extras?.getString("albumId").orEmpty()
+
+    // A song carries its artist list, not an artist id of its own, so the id comes from
+    // the first artist there. Reading the missing extra was why the button vanished.
+    val artistId = metadata?.extras?.getString("artistId")
+        ?: metadata?.artists?.firstOrNull()?.id
+        ?: ""
 
     // The star reflects what the provider last said about this track, and flips on its
     // own the moment it is pressed rather than waiting for the next metadata update.
@@ -791,7 +798,7 @@ fun TvNowPlaying(
                 lyricsOpen = lyricsOpen,
                 queueOpen = queueOpen,
                 favorite = favorite,
-                hasArtist = !metadata?.extras?.getString("artistId").isNullOrBlank(),
+                hasArtist = artistId.isNotBlank(),
                 entryFocus = barFocus,
                 onToggleLyrics = {
                     lyricsOpen = !lyricsOpen
@@ -810,6 +817,7 @@ fun TvNowPlaying(
                     }
                 },
                 onGoToArtist = onGoToArtist,
+                onOpenMore = { moreOpen = true },
                 onShare = { shareOpen = true },
                 onSleepTimer = { sleepTimerOpen = true },
                 onDismiss = {
@@ -952,6 +960,7 @@ private fun ApplePlayerBar(
     onToggleInfo: () -> Unit,
     onToggleFavorite: () -> Unit,
     onGoToArtist: () -> Unit,
+    onOpenMore: () -> Unit,
     onShare: () -> Unit,
     onSleepTimer: () -> Unit,
     onDismiss: () -> Unit,
@@ -999,18 +1008,18 @@ private fun ApplePlayerBar(
                 onClick = onToggleFavorite
             )
 
-            if (hasArtist) {
-                Spacer(Modifier.width(12.dp))
+            // Always there: the artist page when the track names one, the menu when it
+            // does not (radio, or a provider that ships no artists at all).
+            Spacer(Modifier.width(12.dp))
 
-                BarCircleButton(
-                    icon = R.drawable.rounded_artist_24,
-                    contentDescription = "Go to Artist",
-                    active = false,
-                    tint = color,
-                    size = 44.dp,
-                    onClick = onGoToArtist
-                )
-            }
+            BarCircleButton(
+                icon = if (hasArtist) R.drawable.rounded_artist_24 else R.drawable.rounded_more_horiz_24,
+                contentDescription = if (hasArtist) "Go to Artist" else "More",
+                active = false,
+                tint = color,
+                size = 44.dp,
+                onClick = if (hasArtist) onGoToArtist else onOpenMore
+            )
         }
 
         if (!isRadio)

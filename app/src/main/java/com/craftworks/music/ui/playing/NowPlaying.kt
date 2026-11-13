@@ -36,6 +36,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.craftworks.music.R
 import com.craftworks.music.data.model.Screen
+import com.craftworks.music.data.model.artists
 import com.craftworks.music.managers.settings.OLEDProtectionMode
 import com.craftworks.music.player.ChoraMediaLibraryService
 import com.craftworks.music.ui.elements.dialogs.RatingDialog
@@ -117,6 +118,7 @@ fun NowPlayingContent(
             },
             onGoToArtist = {
                 val artistId = metadata?.extras?.getString("artistId")
+                    ?: metadata?.artists?.firstOrNull()?.id
                 if (!artistId.isNullOrBlank()) {
                     onHide()
                     navHostController.navigate(

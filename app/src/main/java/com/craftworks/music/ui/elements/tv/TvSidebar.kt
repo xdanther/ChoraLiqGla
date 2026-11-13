@@ -277,8 +277,15 @@ private fun TvSidebarPanel(
         }
     }
 
+    // The panel is composed as its enter animation starts, so its first item may not be
+    // attached yet. Asking once crashed the app on the Menu key; ask until it lands.
     LaunchedEffect(Unit) {
-        firstItemFocusRequester.requestFocus()
+        repeat(12) {
+            if (runCatching { firstItemFocusRequester.requestFocus() }.isSuccess) {
+                return@LaunchedEffect
+            }
+            delay(30)
+        }
     }
 
     Column(
