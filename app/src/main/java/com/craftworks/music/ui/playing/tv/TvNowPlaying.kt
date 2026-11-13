@@ -187,6 +187,7 @@ fun TvNowPlaying(
     var barFocusTicket by remember { mutableIntStateOf(0) }
     var focusBarOnShow by remember { mutableStateOf(false) }
     var barOwnsFocus by remember { mutableStateOf(false) }
+    var barHadFocus by remember { mutableStateOf(false) }
 
     // The bar is a visiting guest: it fades away again so the artwork stays the main thing.
     LaunchedEffect(barVisible, lastInteraction, infoOpen, queueOpen, moreOpen, shareOpen) {
@@ -262,6 +263,7 @@ fun TvNowPlaying(
     fun revealBar(focusBar: Boolean = false) {
         lastInteraction = System.nanoTime()
         focusBarOnShow = focusBar
+        barHadFocus = false
         barVisible = true
     }
 
@@ -722,7 +724,14 @@ fun TvNowPlaying(
                 pageFocus = pageFocus,
                 onBarFocusChanged = { hasFocus ->
                     barOwnsFocus = hasFocus
-                    if (!hasFocus && !infoOpen && !queueOpen && !moreOpen && !shareOpen) {
+                    if (hasFocus) {
+                        barHadFocus = true
+                    } else if (barHadFocus &&
+                        !infoOpen && !queueOpen && !moreOpen && !shareOpen
+                    ) {
+                        // Only a real move away from the bar closes it; a bar that was
+                        // merely shown (by OK) never had focus and must stay on screen.
+                        barHadFocus = false
                         barVisible = false
                     }
                 },
@@ -1260,23 +1269,38 @@ private fun TvLyricsPane(
     val recenter by settings.lyricsRecenterAfterScroll.collectAsStateWithLifecycle(true)
     val bounce by settings.lyricsBounce.collectAsStateWithLifecycle(true)
 
-    val lines = remember(lyrics) {
-        lyrics.lines
-            .map { line -> line.startMs to line.lines.joinToString(" ") { it.text }.trim() }
-            .filter { it.second.isNotBlank() }
-    }
-
-    if (lines.isEmpty()) return
-
     var positionMs by remember { mutableIntStateOf(mediaController?.currentPosition?.toInt() ?: 0) }
+    var durationMs by remember {
+        mutableLongStateOf(mediaController?.duration?.coerceAtLeast(0L) ?: 0L)
+    }
 
     LaunchedEffect(mediaController) {
         val controller = mediaController ?: return@LaunchedEffect
         while (true) {
             positionMs = controller.currentPosition.toInt()
+            durationMs = controller.duration.coerceAtLeast(0L)
             delay(250)
         }
     }
+
+    val lines = remember(lyrics, durationMs) {
+        val raw = lyrics.lines
+            .map { line -> line.startMs to line.lines.joinToString(" ") { it.text }.trim() }
+            .filter { it.second.isNotBlank() }
+
+        // Plain lyrics carry no timestamps at all, so every line would sit on 0 and
+        // the pane would never move. Spread them over the track instead: the last
+        // line lands at the end of the song and the reader advances with playback.
+        if (raw.any { it.first > 0L } || durationMs <= 0L || raw.isEmpty()) {
+            raw
+        } else {
+            raw.mapIndexed { index, line ->
+                (durationMs * index / raw.size) to line.second
+            }
+        }
+    }
+
+    if (lines.isEmpty()) return
 
     val activeIndex = remember(positionMs, lines) {
         lines.indexOfLast { it.first <= positionMs }.coerceAtLeast(0)
