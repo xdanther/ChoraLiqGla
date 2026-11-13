@@ -2,6 +2,8 @@
 
 package com.craftworks.music.ui.playing.tv
 
+import com.craftworks.music.ui.elements.tv.glassRim
+import com.craftworks.music.ui.elements.tv.liquidGlass
 import com.craftworks.music.ui.theme.TvType
 import android.view.KeyEvent
 import androidx.annotation.OptIn
@@ -910,12 +912,14 @@ private fun ApplePlayerBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             val pillShade = if (color.luminance() > 0.5f) Color.White else Color.Black
+            var pillFocused by remember { mutableStateOf(false) }
 
             Button(
                 onClick = onToggleInfo,
                 modifier = Modifier
                     .focusRequester(infoFocus)
-                    .border(1.dp, pillShade.copy(alpha = 0.28f), CircleShape)
+                    .onFocusChanged { pillFocused = it.hasFocus }
+                    .glassRim(CircleShape, focused = pillFocused, strength = 0.85f)
                     .focusProperties {
                         up = progressFocus
                     },
@@ -989,12 +993,14 @@ private fun BarCircleButton(
     // Liquid glass: a translucent shade of the player's own ink inside a hairline
     // outline, brightening rather than inverting when the remote lands on it.
     val shade = if (tint.luminance() > 0.5f) Color.White else Color.Black
+    var focused by remember { mutableStateOf(false) }
 
     Button(
         onClick = onClick,
         modifier = modifier
             .size(38.dp)
-            .border(1.dp, shade.copy(alpha = 0.28f), CircleShape),
+            .onFocusChanged { focused = it.hasFocus }
+            .glassRim(CircleShape, focused = focused, strength = 0.9f),
         shape = ButtonDefaults.shape(shape = CircleShape),
         contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.colors(
@@ -1368,7 +1374,7 @@ private fun TvQueueSheet(
                 .width(480.dp)
                 .heightIn(max = 396.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF1C1C1E))
+                .liquidGlass(RoundedCornerShape(20.dp))
                 .padding(vertical = 16.dp)
         ) {
             Text(
@@ -1460,7 +1466,7 @@ private fun TvMoreSheet(
             modifier = Modifier
                 .width(320.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF1C1C1E))
+                .liquidGlass(RoundedCornerShape(20.dp))
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -1499,7 +1505,7 @@ private fun TvShareSheet(
             modifier = Modifier
                 .width(540.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFF1C1C1E))
+                .liquidGlass(RoundedCornerShape(24.dp))
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -1674,7 +1680,7 @@ private fun TvSleepTimerSheet(
             modifier = Modifier
                 .width(320.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF1C1C1E))
+                .liquidGlass(RoundedCornerShape(20.dp))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1761,7 +1767,7 @@ private fun TrackInfoCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(surface)
+            .liquidGlass(RoundedCornerShape(18.dp), base = surface)
             .focusGroup()
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown &&

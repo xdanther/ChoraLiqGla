@@ -13,6 +13,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
 import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.StandardCardContainer
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -37,6 +38,8 @@ fun TvPlaylistCard(
                 onClick = onClick,
                 onLongClick = onLongClick,
                 interactionSource = it,
+                // Apple's tvOS lift is a small one; the stock card springs 10%.
+                scale = CardDefaults.scale(focusedScale = 1.045f),
                 content = {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)

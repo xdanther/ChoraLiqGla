@@ -213,6 +213,8 @@ fun TvSidebarScaffold(
                             drawLayer(backdrop)
                         }
                     }
+                    // The blurred page is the refraction; this is its glass edge.
+                    .glassRim(RoundedCornerShape(26.dp), strength = 0.9f)
             )
         }
 
