@@ -517,7 +517,9 @@ fun TvNowPlaying(
                             Column(
                                 modifier = Modifier
                                     .weight(0.42f)
-                                    .fillMaxHeight(),
+                                    .fillMaxHeight()
+                                    // Lifted off the bottom edge, clear of the bar.
+                                    .padding(bottom = 72.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -565,7 +567,9 @@ fun TvNowPlaying(
                                 modifier = Modifier
                                     .weight(0.58f)
                                     .fillMaxHeight()
-                                    .padding(vertical = 12.dp)
+                                    // The list stops above the player surface rather than
+                                    // sliding underneath it.
+                                    .padding(top = 12.dp, bottom = 96.dp)
                             ) {
                                 if (appleLyrics) {
                                     TvLyricsPane(
@@ -616,7 +620,10 @@ fun TvNowPlaying(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Spacer(Modifier.weight(1f))
+                            // Weighted higher than centre: the player surface lives at
+                            // the bottom edge, so the artwork reads better sitting above
+                            // the middle of the screen.
+                            Spacer(Modifier.weight(0.42f))
 
                             AlbumArtHero(metadata = metadata, size = coverSize)
 
