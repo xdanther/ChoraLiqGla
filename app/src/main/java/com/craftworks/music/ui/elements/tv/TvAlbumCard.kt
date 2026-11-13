@@ -50,7 +50,7 @@ fun TvAlbumCard(
                 onClick = onClick,
                 interactionSource = it,
                 // Apple's tvOS lift is a small one; the stock card springs 10%.
-                scale = CardDefaults.scale(focusedScale = 1.045f),
+                scale = CardDefaults.scale(1.045f),
                 content = {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
