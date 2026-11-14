@@ -2,6 +2,7 @@ package com.craftworks.music.player
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -53,8 +54,10 @@ import com.craftworks.music.data.repository.PlaylistRepository
 import com.craftworks.music.data.repository.RadioRepository
 import com.craftworks.music.data.repository.SongRepository
 import com.craftworks.music.managers.MediaProviderManager
+import com.craftworks.music.managers.OfflineDownloadManager
 import com.craftworks.music.managers.TranscodeManager
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
+import com.craftworks.music.managers.settings.DownloadSettingsManager
 import com.craftworks.music.managers.settings.LocalDataSettingsManager
 import com.craftworks.music.managers.settings.PlaybackSettingsManager
 import com.google.common.collect.ImmutableList
@@ -78,6 +81,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
+import java.io.File
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import javax.inject.Inject
@@ -108,6 +112,18 @@ class ChoraMediaLibraryService : MediaLibraryService() {
     @Inject lateinit var appearanceSettingsManager: AppearanceSettingsManager
     @Inject lateinit var playbackSettingsManager: PlaybackSettingsManager
     @Inject lateinit var transcodeManager: TranscodeManager
+    @Inject lateinit var offlineDownloadManager: OfflineDownloadManager
+    @Inject lateinit var downloadSettingsManager: DownloadSettingsManager
+    @Inject lateinit var localDataSettingsManager: LocalDataSettingsManager
+
+    @Volatile private var offlineMode = false
+    @Volatile private var normalizeVolume = true
+    @Volatile private var replayGainPreamp = 0
+    @Volatile private var scrobbleEnabled = true
+    @Volatile private var autoPlayEnabled = false
+    @Volatile private var saveQueueToServer = false
+    private var queueSaveJob: Job? = null
+    private var autoplayJob: Job? = null
 
     @Inject lateinit var albumRepository: AlbumRepository
     @Inject lateinit var artistRepository: ArtistRepository
@@ -286,6 +302,16 @@ class ChoraMediaLibraryService : MediaLibraryService() {
                     val providerId = uri.authority ?: throw Exception("No provider for MediaItem")
                     val songId = uri.lastPathSegment ?: throw Exception("No ID for MediaItem")
 
+                    // A downloaded song is served from disk, so a queue built while it
+                    // was still streaming keeps playing after the download finishes.
+                    offlineDownloadManager.localPath(songId)?.let { localPath ->
+                        return dataSpec.withUri(Uri.fromFile(File(localPath)))
+                    }
+
+                    if (offlineMode) {
+                        throw Exception("Offline mode is on and this song is not downloaded")
+                    }
+
                     val provider = MediaProviderManager.getProvider(providerId)
                     var actualStreamUrl = provider?.getStreamUrl(songId, false)
                         ?: throw Exception("Can't get streamUrl for mediaitem $songId")
@@ -346,36 +372,58 @@ class ChoraMediaLibraryService : MediaLibraryService() {
         player.repeatMode = Player.REPEAT_MODE_OFF
         player.shuffleModeEnabled = false
 
+        serviceMainScope.launch {
+            downloadSettingsManager.offlineModeFlow.collect { offlineMode = it }
+        }
+        serviceMainScope.launch {
+            downloadSettingsManager.normalizeVolumeFlow.collect { normalizeVolume = it }
+        }
+        serviceMainScope.launch {
+            downloadSettingsManager.replayGainPreampFlow.collect { replayGainPreamp = it }
+        }
+        serviceMainScope.launch {
+            downloadSettingsManager.scrobbleEnabledFlow.collect { scrobbleEnabled = it }
+        }
+        serviceMainScope.launch {
+            downloadSettingsManager.saveQueueToServerFlow.collect { saveQueueToServer = it }
+        }
+        serviceMainScope.launch {
+            playbackSettingsManager.autoPlayFlow.collect { autoPlayEnabled = it }
+        }
+        serviceMainScope.launch {
+            downloadSettingsManager.skipSilenceFlow.collect { enabled ->
+                (player as? ExoPlayer)?.skipSilenceEnabled = enabled
+            }
+        }
+
         var playerScrobbled = false
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // Apply ReplayGain
-                player.volume = clamp(
-                    (10f.pow(((mediaItem?.mediaMetadata?.extras?.getFloat("replayGain") ?: 0f) / 20f))),
-                    0f,
-                    1f
-                )
+                if (normalizeVolume) {
+                    val gain = (mediaItem?.mediaMetadata?.extras?.getFloat("replayGain") ?: 0f) + replayGainPreamp
+                    player.volume = clamp(10f.pow(gain / 20f), 0f, 1f)
+                } else {
+                    player.volume = 1f
+                }
                 Log.d("REPLAY GAIN", "Setting ReplayGain to ${player.volume}")
 
                 playerScrobbled = false
 
                 super.onMediaItemTransition(mediaItem, reason)
 
+                scheduleQueueSave()
+                maybeAutoplay(mediaItem)
+
                 serviceIOScope.launch {
                     lyricsRepository.getLyrics(mediaItem?.mediaMetadata)
                     val mediaId = mediaItem?.mediaMetadata?.id ?: return@launch
                     songRepository.scrobbleSong(mediaId, 0, 1f, ScrobbleEvent.START, false)
                 }
+            }
 
-                /*
-                serviceMainScope.launch {
-                    playbackSettingsManager.autoPlayFlow.collect {
-                        if (it && player.currentMediaItemIndex == player.mediaItemCount - 1)
-                            player.addMediaItems(songRepository.getSimilarSongs(mediaItem?.mediaMetadata?.extras?.getString("navidromeID")!!, 1))
-                    }
-                }
-                */
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (!isPlaying) scheduleQueueSave()
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -396,6 +444,7 @@ class ChoraMediaLibraryService : MediaLibraryService() {
             ) {
                 if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                     seekPosMs = newPosition.positionMs
+                    scheduleQueueSave()
                 }
                 super.onPositionDiscontinuity(oldPosition, newPosition, reason)
             }
@@ -403,6 +452,7 @@ class ChoraMediaLibraryService : MediaLibraryService() {
 
         val mainActivityIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MainActivity.EXTRA_OPEN_NOW_PLAYING, true)
         }
 
         val sessionActivityPendingIntent = PendingIntent.getActivity(
@@ -419,6 +469,11 @@ class ChoraMediaLibraryService : MediaLibraryService() {
 
         scrobbleJob = serviceMainScope.launch {
             while (isActive) {
+                if (!scrobbleEnabled) {
+                    delay(1000)
+                    continue
+                }
+
                 val duration = player.duration
                 val mediaItem = player.currentMediaItem
 
@@ -465,6 +520,87 @@ class ChoraMediaLibraryService : MediaLibraryService() {
         }
 
         Log.d("AA", "Initialized MediaLibraryService.")
+    }
+
+    /**
+     * Persists the queue and position shortly after it stops changing, and mirrors it
+     * to the server when that option is on. The debounce keeps seeks from hammering
+     * both DataStore and the provider.
+     */
+    private fun scheduleQueueSave() {
+        if (!::player.isInitialized || player.mediaItemCount == 0) return
+
+        queueSaveJob?.cancel()
+        queueSaveJob = serviceIOScope.launch {
+            delay(750)
+
+            var items: List<MediaItem> = emptyList()
+            var startIndex = 0
+            var positionMs = 0L
+            var shuffle = false
+            var repeatMode = Player.REPEAT_MODE_OFF
+
+            withContext(Dispatchers.Main) {
+                val count = player.mediaItemCount
+                if (count > 0) {
+                    items = List(count) { player.getMediaItemAt(it) }
+                    startIndex = player.currentMediaItemIndex.coerceIn(0, count - 1)
+                    positionMs = player.currentPosition
+                    shuffle = player.shuffleModeEnabled
+                    repeatMode = player.repeatMode
+                }
+            }
+
+            if (items.isEmpty()) return@launch
+
+            localDataSettingsManager.setPlaybackResumption(
+                items, startIndex, positionMs, shuffle, repeatMode
+            )
+
+            if (saveQueueToServer) {
+                runCatching {
+                    MediaProviderManager.currentProvider.value?.savePlayQueue(
+                        songs = items.map { it.mediaId },
+                        currentIndex = startIndex,
+                        positionMs = positionMs.toInt()
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Apple Music's autoplay: when the queue runs out, ask the server for songs like
+     * the last one and append them. The queue is capped so a long session cannot grow
+     * without bound.
+     */
+    private fun maybeAutoplay(mediaItem: MediaItem?) {
+        if (!autoPlayEnabled || mediaItem == null) return
+        if (mediaItem.mediaMetadata.mediaType == MediaMetadata.MEDIA_TYPE_RADIO_STATION) return
+        if (autoplayJob?.isActive == true) return
+
+        autoplayJob = serviceMainScope.launch {
+            val isLast = withContext(Dispatchers.Main) {
+                player.currentMediaItemIndex >= player.mediaItemCount - 1
+            }
+            if (!isLast) return@launch
+
+            val songId = mediaItem.mediaMetadata.id ?: return@launch
+            val similar = withContext(Dispatchers.IO) {
+                runCatching { songRepository.getSimilarSongs(songId, 20) }.getOrDefault(emptyList())
+            }
+            if (similar.isEmpty()) return@launch
+
+            withContext(Dispatchers.Main) {
+                if (player.mediaItemCount >= 500) return@withContext
+
+                val existing = (0 until player.mediaItemCount)
+                    .map { player.getMediaItemAt(it).mediaId }
+                    .toSet()
+                val additions = similar.filter { it.mediaId !in existing }.take(20)
+                if (additions.isNotEmpty()) player.addMediaItems(additions)
+            }
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
@@ -673,12 +809,18 @@ class ChoraMediaLibraryService : MediaLibraryService() {
             serviceMainScope.launch {
                 try {
                     val playbackResumptionList = withTimeout(2.seconds) {
-                        LocalDataSettingsManager(applicationContext)
-                            .playbackResumptionPlaylistWithStartPosition
-                            .first()
+                        localDataSettingsManager.playbackResumptionPlaylistWithStartPosition.first()
+                    }
+                    val shuffle = withTimeout(2.seconds) {
+                        localDataSettingsManager.playbackResumptionShuffleFlow.first()
+                    }
+                    val repeatMode = withTimeout(2.seconds) {
+                        localDataSettingsManager.playbackResumptionRepeatFlow.first()
                     }
                     withContext(Dispatchers.Main) {
                         player.setMediaItems(playbackResumptionList.mediaItems)
+                        player.repeatMode = repeatMode
+                        player.shuffleModeEnabled = shuffle
                         player.prepare()
                         player.playWhenReady = true
                         player.seekTo(playbackResumptionList.startIndex, playbackResumptionList.startPositionMs)

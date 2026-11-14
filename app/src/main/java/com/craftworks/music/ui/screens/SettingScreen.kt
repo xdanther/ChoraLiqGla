@@ -113,6 +113,13 @@ fun SettingScreen(
                 )
 
                 SettingsButton(
+                    Screen.S_Library,
+                    R.drawable.rounded_download_24,
+                    R.string.settings_library,
+                    navHostController
+                )
+
+                SettingsButton(
                     Screen.S_Misc,
                     Icons.Rounded.Menu,
                     R.string.settings_misc,

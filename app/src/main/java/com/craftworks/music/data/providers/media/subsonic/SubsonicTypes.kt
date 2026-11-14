@@ -50,6 +50,12 @@ data class SubsonicBody(
     // Songs
     val song: SubsonicSong? = null,
     val songsByGenre: SubsonicSongList? = null,
+    val randomSongs: SubsonicSongList? = null,
+    val similarSongs2: SubsonicSongList? = null,
+    val topSongs: SubsonicSongList? = null,
+
+    // Play queue
+    val playQueue: SubsonicPlayQueue? = null,
 
     // Albums
     val albumList: SubsonicAlbumList? = null,
@@ -115,6 +121,16 @@ data class Starred(
 @Serializable
 data class SubsonicSongList(
     val song: List<SubsonicSong>? = null
+)
+
+@Serializable
+data class SubsonicPlayQueue(
+    val entry: List<SubsonicSong> = emptyList(),
+    val current: String? = null,
+    val position: Long? = 0,
+    val username: String? = null,
+    val changed: String? = null,
+    val changedBy: String? = null
 )
 @Serializable
 data class SubsonicSong(

@@ -64,6 +64,31 @@
         <string name="playback_audio_offloading">Offload Audio</string>
         // Scrobble
         <string name="playback_min_scrobble_percentage">Min. Scrobble Percentage</string>
+    <string name="settings_library">Library &amp; Downloads</string>
+        <string name="library_download_quality">Download quality</string>
+            <string name="library_download_quality_original">Original</string>
+            <string name="library_download_quality_high">High (320 kbps)</string>
+            <string name="library_download_quality_balanced">Balanced (192 kbps)</string>
+            <string name="library_download_quality_data_saver">Data saver (128 kbps)</string>
+        <string name="library_wifi_only">Download on Wi-Fi only</string>
+        <string name="library_offline_mode">Offline mode</string>
+        <string name="library_downloads">Downloaded music</string>
+        <string name="library_downloads_summary">%1$d songs • %2$s</string>
+        <string name="library_downloads_active">%1$d downloading • %2$s</string>
+        <string name="library_empty_downloads">No downloaded music yet</string>
+        <string name="library_delete_all">Delete all downloads</string>
+        <string name="library_delete_download">Delete download</string>
+        <string name="library_selected">Selected</string>
+        <string name="library_close">Close</string>
+        <string name="library_auto_play">Autoplay similar songs</string>
+        <string name="library_normalize_volume">Normalize volume (ReplayGain)</string>
+        <string name="library_skip_silence">Skip silence</string>
+        <string name="library_save_queue_server">Save queue to server</string>
+        <string name="library_resume_playback">Resume playback on start</string>
+        <string name="library_scrobble">Scrobble plays</string>
+        <string name="library_continue_row">Show Continue Playing row</string>
+        <string name="library_search_as_you_type">Search as you type</string>
+    <string name="home_continue_playing">Continue Playing</string>
     <string name="settings_misc">Miscellaneous</string>
         // Download
     <string name="misc_download_template">Download Template</string>

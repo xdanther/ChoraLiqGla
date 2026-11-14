@@ -39,7 +39,7 @@ fun TvSettingScreen(
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+        runCatching { focusRequester.requestFocus() }
     }
 
     Column(
@@ -75,6 +75,16 @@ fun TvSettingScreen(
             Screen.S_Playback,
             R.drawable.s_m_playback,
             R.string.settings_playback,
+            navHostController,
+            Modifier.onFocusChanged {
+                focusRequester.saveFocusedChild()
+            }
+        )
+
+        SettingsButton(
+            Screen.S_Library,
+            R.drawable.rounded_download_24,
+            R.string.settings_library,
             navHostController,
             Modifier.onFocusChanged {
                 focusRequester.saveFocusedChild()

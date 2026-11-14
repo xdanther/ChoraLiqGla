@@ -62,6 +62,7 @@ import com.craftworks.music.ui.screens.RadioScreen
 import com.craftworks.music.ui.screens.SettingScreen
 import com.craftworks.music.ui.screens.SongsScreen
 import com.craftworks.music.ui.screens.settings.S_AppearanceScreen
+import com.craftworks.music.ui.screens.settings.S_LibraryScreen
 import com.craftworks.music.ui.screens.settings.S_LyricsProviderScreen
 import com.craftworks.music.ui.screens.settings.S_MiscScreen
 import com.craftworks.music.ui.screens.settings.S_PlaybackScreen
@@ -78,6 +79,7 @@ import com.craftworks.music.ui.screens.tv.TvSearchScreen
 import com.craftworks.music.ui.screens.tv.TvSettingScreen
 import com.craftworks.music.ui.screens.tv.TvSongsScreen
 import com.craftworks.music.ui.screens.tv.settings.TvS_AppearanceScreen
+import com.craftworks.music.ui.screens.tv.settings.TvS_LibraryScreen
 import com.craftworks.music.ui.screens.tv.settings.TvS_PlaybackScreen
 import com.craftworks.music.ui.screens.tv.settings.TvS_ProviderScreen
 import com.craftworks.music.ui.viewmodels.AlbumScreenViewModel
@@ -368,6 +370,15 @@ fun SetupNavGraph(
                         TvS_PlaybackScreen()
                     else
                         S_PlaybackScreen(navController)
+                }
+                composable<Screen.S_Library>(
+                    enterTransition = { enterTransition },
+                    exitTransition = { exitTransition }
+                ) {
+                    if (isTv)
+                        TvS_LibraryScreen()
+                    else
+                        S_LibraryScreen(navController)
                 }
                 composable<Screen.S_Misc>(
                     enterTransition = { enterTransition },

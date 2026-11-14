@@ -20,6 +20,7 @@ import com.craftworks.music.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -27,6 +28,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+@androidx.annotation.OptIn(UnstableApi::class)
 class LocalDataSettingsManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
@@ -37,6 +39,8 @@ class LocalDataSettingsManager @Inject constructor(
         private val MEDIA_RESUMPTION_PLAYLIST = stringPreferencesKey("media_resumption_playlist")
         private val MEDIA_RESUMPTION_INDEX = intPreferencesKey("media_resumption_index")
         private val MEDIA_RESUMPTION_TIME = longPreferencesKey("media_resumption_timestamp")
+        private val MEDIA_RESUMPTION_SHUFFLE = booleanPreferencesKey("media_resumption_shuffle")
+        private val MEDIA_RESUMPTION_REPEAT = intPreferencesKey("media_resumption_repeat")
 
         private val SORT_ALBUM = stringPreferencesKey("sort_album")
         private val SORT_ALBUM_ORDER = stringPreferencesKey("sort_album_order")
@@ -82,7 +86,13 @@ class LocalDataSettingsManager @Inject constructor(
     }
 */
     @UnstableApi
-    suspend fun setPlaybackResumption(playlist: List<MediaItem>, currentPos: Int, currentTime: Long) {
+    suspend fun setPlaybackResumption(
+        playlist: List<MediaItem>,
+        currentPos: Int,
+        currentTime: Long,
+        shuffle: Boolean = false,
+        repeatMode: Int = 0
+    ) {
         withContext(NonCancellable) {
             context.dataStore.edit { preferences ->
                 preferences[MEDIA_RESUMPTION_PLAYLIST] =
@@ -112,6 +122,8 @@ class LocalDataSettingsManager @Inject constructor(
                     })
                 preferences[MEDIA_RESUMPTION_INDEX] = currentPos
                 preferences[MEDIA_RESUMPTION_TIME] = currentTime
+                preferences[MEDIA_RESUMPTION_SHUFFLE] = shuffle
+                preferences[MEDIA_RESUMPTION_REPEAT] = repeatMode
             }
         }
     }
@@ -127,6 +139,20 @@ class LocalDataSettingsManager @Inject constructor(
             )
         }
     }
+
+    val playbackResumptionShuffleFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[MEDIA_RESUMPTION_SHUFFLE] ?: false
+    }
+
+    val playbackResumptionRepeatFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[MEDIA_RESUMPTION_REPEAT] ?: 0
+    }
+
+    /** The last queue, for the Continue Playing row; a corrupt or empty index is just an empty row. */
+    val playbackResumptionItemsFlow: Flow<List<MediaItem>> =
+        playbackResumptionPlaylistWithStartPosition
+            .map { it.mediaItems.toList() }
+            .catch { emit(emptyList<MediaItem>()) }
 
     val sortAlbum: Flow<AlbumListSort> =
         context.dataStore.data.map { preferences ->

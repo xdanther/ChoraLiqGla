@@ -448,7 +448,9 @@ open class SubsonicMediaProvider : MediaProvider() {
         albumId: String,
         count: Int?
     ): List<MediaModel.Song> {
-        TODO("Not yet implemented")
+        val songs = service.getAlbum(albumId).subsonicResponse.album?.song
+            ?.map { it.toMediaModel(this.id) } ?: emptyList()
+        return if (count != null) songs.shuffled().take(count) else songs.shuffled()
     }
 
     override suspend fun getArtistList(query: MediaQuery.ArtistListQuery): List<MediaModel.Artist> {
@@ -459,12 +461,21 @@ open class SubsonicMediaProvider : MediaProvider() {
         artistId: String,
         count: Int?
     ): List<MediaModel.Song> {
-        TODO("Not yet implemented")
+        val artistName = service.getArtist(artistId).subsonicResponse.artist?.name
+        val topSongs = if (artistName.isNullOrBlank()) emptyList() else {
+            service.getTopSongs(artistName, count ?: 20)
+                .subsonicResponse.topSongs?.song
+                ?.map { it.toMediaModel(this.id) } ?: emptyList()
+        }
+
+        if (topSongs.isNotEmpty()) return topSongs
+
+        return service.getRandomSongs(size = count ?: 20)
+            .subsonicResponse.randomSongs?.song
+            ?.map { it.toMediaModel(this.id) } ?: emptyList()
     }
 
-    override suspend fun getDownloadUrl(id: String): String {
-        TODO("Not yet implemented")
-    }
+    override suspend fun getDownloadUrl(id: String): String = getStreamUrl(id, false)
 
     override suspend fun getFolder(query: MediaQuery.FolderQuery): MediaModel.Folder {
         TODO("Not yet implemented")
@@ -534,7 +545,8 @@ open class SubsonicMediaProvider : MediaProvider() {
     }
 
     override suspend fun getPlaylistDetail(id: String): MediaModel.Playlist {
-        TODO("Not yet implemented")
+        return service.getPlaylist(id).subsonicResponse.playlist?.toMediaModel(this.id)
+            ?: throw Exception("Playlist not found")
     }
 
     override suspend fun getPlaylistList(query: MediaQuery.PlaylistListQuery): List<MediaModel.Playlist> {
@@ -559,11 +571,36 @@ open class SubsonicMediaProvider : MediaProvider() {
     }
 
     override suspend fun getPlayQueue(): GetQueueResponse {
-        TODO("Not yet implemented")
+        val queue = service.getPlayQueue().subsonicResponse.playQueue
+        val entries = queue?.entry?.map { it.toMediaModel(this.id) } ?: emptyList()
+        val currentIndex = queue?.current
+            ?.let { current -> entries.indexOfFirst { it.id == current } }
+            ?.takeIf { it >= 0 } ?: 0
+
+        return GetQueueResponse(
+            changed = queue?.changed ?: "",
+            changedBy = queue?.changedBy ?: "",
+            currentIndex = currentIndex,
+            entry = entries,
+            positionMs = queue?.position ?: 0,
+            username = queue?.username ?: ""
+        )
     }
 
     override suspend fun getRandomSongList(query: MediaQuery.RandomSongListQuery): List<MediaModel.Song> {
-        TODO("Not yet implemented")
+        val folderIds = when (val folders = query.musicFolderId) {
+            is List<*> -> folders.mapNotNull { it?.toString()?.toIntOrNull() }
+            is String -> listOfNotNull(folders.toIntOrNull())
+            else -> data.libraries.filter { it.second }.mapNotNull { it.first.id.toIntOrNull() }
+        }
+
+        return service.getRandomSongs(
+            size = query.limit ?: 20,
+            genre = query.genre,
+            fromYear = query.minYear,
+            toYear = query.maxYear,
+            musicFolderId = folderIds.ifEmpty { null }
+        ).subsonicResponse.randomSongs?.song?.map { it.toMediaModel(this.id) } ?: emptyList()
     }
 
     override suspend fun getRoles(): List<String> {
@@ -579,11 +616,14 @@ open class SubsonicMediaProvider : MediaProvider() {
         count: Int?,
         musicFolderId: List<String>?
     ): List<MediaModel.Song> {
-        TODO("Not yet implemented")
+        return service.getSimilarSongs2(songId, count ?: 20)
+            .subsonicResponse.similarSongs2?.song
+            ?.map { it.toMediaModel(this.id) } ?: emptyList()
     }
 
     override suspend fun getSongDetail(id: String): MediaModel.Song {
-        TODO("Not yet implemented")
+        return service.getSong(id).subsonicResponse.song?.toMediaModel(this.id)
+            ?: throw Exception("Song not found")
     }
 
     override suspend fun getSongList(query: MediaQuery.SongListQuery): List<MediaModel.Song> {
@@ -680,7 +720,12 @@ open class SubsonicMediaProvider : MediaProvider() {
         limit: Int?,
         type: String?
     ): List<MediaModel.Song> {
-        TODO("Not yet implemented")
+        val artistName = artist.ifBlank { service.getArtist(artistId).subsonicResponse.artist?.name.orEmpty() }
+        if (artistName.isBlank()) return emptyList()
+
+        return service.getTopSongs(artistName, limit ?: 20)
+            .subsonicResponse.topSongs?.song
+            ?.map { it.toMediaModel(this.id) } ?: emptyList()
     }
 
     override suspend fun getUserInfo(
@@ -734,7 +779,14 @@ open class SubsonicMediaProvider : MediaProvider() {
         currentIndex: Int?,
         positionMs: Int?
     ) {
-        TODO("Not yet implemented")
+        if (songs.isEmpty()) return
+
+        val index = (currentIndex ?: 0).coerceIn(0, songs.lastIndex)
+        service.savePlayQueue(
+            id = songs,
+            current = songs[index],
+            position = positionMs?.toLong() ?: 0L
+        )
     }
 
     override suspend fun scrobble(
@@ -755,7 +807,23 @@ open class SubsonicMediaProvider : MediaProvider() {
     }
 
     override suspend fun search(query: MediaQuery.SearchQuery): SearchResponse {
-        TODO("Not yet implemented")
+        val result = service.search3(
+            query = query.query ?: "",
+            artistCount = query.albumArtistLimit ?: 20,
+            artistOffset = query.albumArtistStartIndex ?: 0,
+            albumCount = query.albumLimit ?: 20,
+            albumOffset = query.albumStartIndex ?: 0,
+            songCount = query.songLimit ?: 20,
+            songOffset = query.songStartIndex ?: 0,
+            musicFolderId = query.musicFolderId?.mapNotNull { it.toIntOrNull() }
+                ?: data.libraries.filter { it.second }.mapNotNull { it.first.id.toIntOrNull() }
+        ).subsonicResponse.searchResult3
+
+        return SearchResponse(
+            albumArtists = result?.artist?.map { it.toMediaModel(this.id) } ?: emptyList(),
+            albums = result?.album?.map { it.toMediaModel(this.id) } ?: emptyList(),
+            songs = result?.song?.map { it.toMediaModel(this.id) } ?: emptyList()
+        )
     }
 
     override suspend fun setPlaylistSongs(

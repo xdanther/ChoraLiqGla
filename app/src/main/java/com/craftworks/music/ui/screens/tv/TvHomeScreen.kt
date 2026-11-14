@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -63,7 +64,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.session.MediaController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import androidx.palette.graphics.Palette
 import androidx.tv.material3.Button
 import androidx.tv.material3.Carousel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -84,8 +84,13 @@ import com.craftworks.music.data.model.Screen
 import com.craftworks.music.data.model.getProvider
 import com.craftworks.music.data.model.id
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
+import com.craftworks.music.managers.settings.DownloadSettingsManager
+import com.craftworks.music.managers.settings.LocalDataSettingsManager
 import com.craftworks.music.player.SongHelper
 import com.craftworks.music.ui.elements.tv.TvAlbumCard
+import com.craftworks.music.ui.elements.tv.TvHorizontalSongCard
+import com.craftworks.music.ui.playing.ArtworkColours
+import com.craftworks.music.ui.playing.ArtworkPalette
 import com.craftworks.music.ui.screens.HomeItem
 import com.craftworks.music.ui.viewmodels.HomeScreenViewModel
 import com.craftworks.music.utils.StringUtils
@@ -125,9 +130,10 @@ fun TvHomeScreen(
 
 
     val focusRequester = remember { FocusRequester() }
+    val screenScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+        runCatching { focusRequester.requestFocus() }
     }
 
     val columnState = rememberLazyListState()
@@ -138,7 +144,7 @@ fun TvHomeScreen(
             .fillMaxSize()
             .focusGroup()
             .focusRequester(focusRequester)
-            .focusRestorer(focusRequester),
+            .focusRestorer(),
         contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
@@ -227,6 +233,50 @@ fun TvHomeScreen(
             }
         }
 
+        item(key = "continue_playing") {
+            val showContinuePlaying by remember {
+                DownloadSettingsManager(context).continuePlayingRowFlow
+            }.collectAsState(initial = true)
+            val resumeItems by remember {
+                LocalDataSettingsManager(context).playbackResumptionItemsFlow
+            }.collectAsState(initial = emptyList())
+
+            if (showContinuePlaying && resumeItems.isNotEmpty()) {
+                Column(Modifier.focusGroup()) {
+                    Text(
+                        text = stringResource(R.string.home_continue_playing),
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = TvType.title3.fontSize,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(start = 40.dp, end = 40.dp, bottom = 14.dp)
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        modifier = Modifier.focusGroup(),
+                        contentPadding = PaddingValues(horizontal = 40.dp)
+                    ) {
+                        itemsIndexed(resumeItems, key = { _, song -> song.mediaId }) { index, song ->
+                            TvHorizontalSongCard(
+                                song = song,
+                                modifier = Modifier.width(360.dp),
+                                onClick = {
+                                    screenScope.launch {
+                                        SongHelper.play(resumeItems, index, mediaController)
+                                        navHostController.navigate(Screen.NowPlayingLandscape) {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         items(
             orderedHomeItems.filter { it.enabled },
             key = { it.key }
@@ -300,50 +350,52 @@ private fun CarouselItem(
             Modifier
         }
 
-    // Extract dominant color of the carousel image to use as background
-    var dominantColor by remember { mutableStateOf(Color.Black) }
+    // Same OKLCH hue clusters as the player, so an album's colour does not change
+    // between the home shelf and the Now Playing screen.
+    var artworkColours by remember(album.mediaId) { mutableStateOf(ArtworkColours.NeutralDark) }
     LaunchedEffect(album.mediaMetadata.artworkUri) {
         val colorRequest = ImageRequest.Builder(context)
-            .data(album.mediaMetadata.getProvider()?.getImageUrl(
-                album.mediaMetadata.extras?.getString("imageId")?:"",
-                LibraryType.ALBUM,
-                32
-            ))
-            .diskCacheKey(album.mediaMetadata.id ?: album.mediaId)
-            .memoryCacheKey(album.mediaMetadata.id ?: album.mediaId)
-            .diskCachePolicy(CachePolicy.READ_ONLY)
-            .memoryCachePolicy(CachePolicy.READ_ONLY)
+            .data(
+                album.mediaMetadata.getProvider()?.getImageUrl(
+                    album.mediaMetadata.extras?.getString("imageId") ?: "",
+                    LibraryType.ALBUM,
+                    64
+                )
+            )
             .allowHardware(false)
             .build()
 
         val result = context.imageLoader.execute(colorRequest)
         if (result is SuccessResult) {
-            val bitmap = (result.image as? BitmapDrawable)?.bitmap
-            bitmap?.let {
-                Palette.from(it).generate { palette ->
-                    val color = palette?.darkVibrantSwatch?.rgb ?: palette?.dominantSwatch?.rgb
-                    color?.let { dominantColor = Color(it) }
-                }
+            (result.image as? BitmapDrawable)?.bitmap?.let { bitmap ->
+                artworkColours = ArtworkPalette.extract(bitmap)
             }
         }
+    }
+
+    val artworkRequest = remember(album.mediaMetadata.artworkUri, album.mediaId) {
+        ImageRequest.Builder(context)
+            .data(
+                album.mediaMetadata.getProvider()?.getImageUrl(
+                    album.mediaMetadata.extras?.getString("imageId") ?: "",
+                    LibraryType.ALBUM,
+                    1024
+                )
+            )
+            .diskCacheKey(album.mediaMetadata.id ?: album.mediaId)
+            .memoryCacheKey(album.mediaMetadata.id ?: album.mediaId)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .crossfade(true)
+            .build()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(dominantColor)
+            .background(artworkColours.base)
     ) {
         AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(album.mediaMetadata.getProvider()?.getImageUrl(
-                    album.mediaMetadata.extras?.getString("imageId")?:"",
-                    LibraryType.ALBUM,
-                    1024
-                ))
-                .diskCacheKey(album.mediaMetadata.id ?: album.mediaId)
-                .diskCachePolicy(CachePolicy.DISABLED)
-                .crossfade(true)
-                .build(),
+            model = artworkRequest,
             fallback = painterResource(R.drawable.placeholder),
             contentDescription = null,
             contentScale = ContentScale.Crop,
@@ -388,7 +440,7 @@ private fun CarouselItem(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.65f),
+                    color = artworkColours.inkSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -399,7 +451,7 @@ private fun CarouselItem(
                 text = title,
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = artworkColours.inkPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )

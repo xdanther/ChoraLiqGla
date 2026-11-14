@@ -1,6 +1,8 @@
 package com.craftworks.music
 
+import android.app.SearchManager
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -104,6 +106,7 @@ import com.craftworks.music.data.BottomNavItem
 import com.craftworks.music.data.model.ProviderFeature
 import com.craftworks.music.data.model.Screen
 import com.craftworks.music.managers.MediaProviderManager
+import com.craftworks.music.managers.SearchRequestManager
 import com.craftworks.music.managers.settings.AppTheme
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
 import com.craftworks.music.player.rememberManagedMediaController
@@ -117,6 +120,7 @@ import com.gigamole.composefadingedges.content.FadingEdgesContentType
 import com.gigamole.composefadingedges.content.scrollconfig.FadingEdgesScrollConfig
 import com.gigamole.composefadingedges.verticalFadingEdges
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -125,10 +129,15 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 class MainActivity : ComponentActivity() {
     lateinit var navController: NavHostController
 
+    private val searchRequests = MutableStateFlow<String?>(null)
+    private val openNowPlayingRequests = MutableStateFlow(false)
+
     @androidx.annotation.OptIn(UnstableApi::class)
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        handleIncomingIntent(intent)
 
         enableEdgeToEdge()
 
@@ -144,6 +153,26 @@ class MainActivity : ComponentActivity() {
 
             MusicPlayerTheme (darkTheme) {
                 navController = rememberNavController()
+
+                val pendingSearch by searchRequests.collectAsState()
+                val pendingOpenNowPlaying by openNowPlayingRequests.collectAsState()
+
+                // A TV launcher search or the system Now Playing card arrives while
+                // this activity is already alive; route it once the graph exists.
+                LaunchedEffect(pendingSearch) {
+                    pendingSearch?.let { query ->
+                        SearchRequestManager.request(query)
+                        navController.navigate(Screen.Search) { launchSingleTop = true }
+                        searchRequests.value = null
+                    }
+                }
+
+                LaunchedEffect(pendingOpenNowPlaying) {
+                    if (pendingOpenNowPlaying) {
+                        navController.navigate(Screen.NowPlayingLandscape) { launchSingleTop = true }
+                        openNowPlayingRequests.value = false
+                    }
+                }
 
                 val mediaController by rememberManagedMediaController()
                 var metadata by remember { mutableStateOf<MediaMetadata?>(null) }
@@ -384,6 +413,30 @@ class MainActivity : ComponentActivity() {
             R.string.notification_download_desc,
             IMPORTANCE_LOW
         )
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        intent ?: return
+
+        if (intent.action == Intent.ACTION_SEARCH) {
+            intent.getStringExtra(SearchManager.QUERY)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { searchRequests.value = it }
+        }
+
+        if (intent.getBooleanExtra(EXTRA_OPEN_NOW_PLAYING, false)) {
+            openNowPlayingRequests.value = true
+        }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_NOW_PLAYING = "openNowPlaying"
     }
 }
 

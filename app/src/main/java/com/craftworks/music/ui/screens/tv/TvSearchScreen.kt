@@ -22,6 +22,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,7 @@ import androidx.compose.ui.focus.FocusRequester.Companion.FocusRequesterFactory.
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
@@ -54,6 +56,8 @@ import androidx.tv.material3.Text
 import com.craftworks.music.R
 import com.craftworks.music.data.model.Screen
 import com.craftworks.music.data.model.id
+import com.craftworks.music.managers.SearchRequestManager
+import com.craftworks.music.managers.settings.DownloadSettingsManager
 import com.craftworks.music.player.SongHelper
 import com.craftworks.music.ui.elements.dialogs.tv.SongDialog
 import com.craftworks.music.ui.elements.tv.TvAlbumCard
@@ -62,6 +66,7 @@ import com.craftworks.music.ui.elements.tv.TvHorizontalSongCard
 import com.craftworks.music.ui.viewmodels.AlbumScreenViewModel
 import com.craftworks.music.ui.viewmodels.ArtistsScreenViewModel
 import com.craftworks.music.ui.viewmodels.SongsScreenViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Preview
@@ -74,6 +79,7 @@ fun TvSearchScreen(
     artistsViewModel: ArtistsScreenViewModel = hiltViewModel()
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val albums by albumsViewModel.searchResults.collectAsStateWithLifecycle()
     val songs by songsViewModel.searchResults.collectAsStateWithLifecycle()
@@ -91,12 +97,36 @@ fun TvSearchScreen(
     )
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
 
+    val searchAsYouType by remember { DownloadSettingsManager(context).searchAsYouTypeFlow }
+        .collectAsState(initial = true)
+    val requestedQuery by SearchRequestManager.query.collectAsState()
+
     val (searchFocusRequester, focusRequester) = remember { FocusRequester.createRefs() }
     val searchInteractionSource = remember { MutableInteractionSource() }
     val isSearchFocused by searchInteractionSource.collectIsFocusedAsState()
 
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+        runCatching { focusRequester.requestFocus() }
+    }
+
+    // A TV launcher search / Assistant query arrives asynchronously: fill the field,
+    // run it, and leave focus on the results instead of the keyboard.
+    LaunchedEffect(requestedQuery) {
+        requestedQuery?.let { query ->
+            searchQuery = query
+            albumsViewModel.search(query)
+            songsViewModel.search(query)
+            artistsViewModel.search(query)
+            SearchRequestManager.consume()
+        }
+    }
+
+    LaunchedEffect(searchQuery, searchAsYouType) {
+        if (!searchAsYouType || searchQuery.length < 2) return@LaunchedEffect
+        delay(350)
+        albumsViewModel.search(searchQuery)
+        songsViewModel.search(searchQuery)
+        artistsViewModel.search(searchQuery)
     }
 
     val textFieldColors = TextFieldDefaults.colors(
@@ -119,7 +149,7 @@ fun TvSearchScreen(
             .fillMaxSize()
             .focusGroup()
             .focusRequester(focusRequester)
-            .focusRestorer(focusRequester),
+            .focusRestorer(),
         contentPadding = PaddingValues(horizontal = 40.dp, vertical = 32.dp),
         horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalArrangement = Arrangement.spacedBy(28.dp),
@@ -230,15 +260,24 @@ fun TvSearchScreen(
                 items(
                     items = artists,
                     key = { artist -> artist.id }
-                ) {
+                ) { artist ->
                     TvArtistCard(
-                        artist = it,
+                        artist = artist,
                         modifier = Modifier.onFocusChanged {
                             focusRequester.saveFocusedChild()
                         },
                         onClick = {
                             focusRequester.saveFocusedChild()
-                            navHostController.navigate(Screen.ArtistDetails) {
+                            navHostController.navigate(
+                                Screen.ArtistDetails(
+                                    artist.id,
+                                    artist.imageUrl
+                                        ?: artist.imageId?.let { imageId ->
+                                            artist.getProvider()?.getImageUrl(imageId)
+                                        }
+                                        ?: ""
+                                )
+                            ) {
                                 launchSingleTop = true
                             }
                         }

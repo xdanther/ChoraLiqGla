@@ -189,7 +189,7 @@ fun TvAlbumDetails(
         var descriptionExpanded by remember { mutableStateOf(false) }
         var showOptions by remember { mutableStateOf(false) }
 
-        LaunchedEffect(Unit) { playRequester.requestFocus() }
+        LaunchedEffect(Unit) { runCatching { playRequester.requestFocus() } }
 
         val artwork = remember(selectedAlbumId, currentProvider) {
             ImageRequest.Builder(context)
