@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import com.craftworks.music.ui.playing.ArtworkColours
+import kotlin.math.hypot
 import kotlin.math.min
 
 /** The whole backdrop is a 64 px texture, exactly like Accord's 60 px blend source. */
@@ -167,7 +168,9 @@ fun ArtworkBlurBackground(
     overlayColor: Color = Color.Transparent,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier.fillMaxSize()) {
+    // The field colour sits under everything, so no transition, rotation or slow
+    // artwork load can ever flash the window background through as black.
+    Box(modifier.fillMaxSize().background(colours.base)) {
         if (artwork == null) {
             // Artwork has not arrived yet: keep the artwork's own colour on screen
             // instead of flashing black.
@@ -304,56 +307,69 @@ private fun LayeredDriftPlate(image: ImageBitmap) {
         label = "frame spin"
     )
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                compositingStrategy = CompositingStrategy.Offscreen
-                rotationZ = frameSpin
-                scaleX = 1.55f
-                scaleY = 1.55f
-            }
-    ) {
-        Image(
-            bitmap = image,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            filterQuality = FilterQuality.Medium,
-            modifier = Modifier
+    Box(Modifier.fillMaxSize()) {
+        // Opaque base: even if a rotating layer exposes an edge, the cover stays on
+        // screen instead of the black window behind it.
+        StillPlate(image)
+
+        Box(
+            Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    rotationZ = baseSpin
-                    scaleX = 1.9f
-                    scaleY = 1.9f
+                    compositingStrategy = CompositingStrategy.Offscreen
+                    rotationZ = frameSpin
+                    // A rotated rectangle only covers its old bounds when it is scaled
+                    // by its diagonal over its shorter side. On 16:9 that is ~2.04;
+                    // the old fixed 1.55 left black wedges at the corners.
+                    val cover = hypot(size.width, size.height) /
+                        min(size.width, size.height).coerceAtLeast(1f) * 1.02f
+                    scaleX = cover
+                    scaleY = cover
                 }
-        )
-        Image(
-            bitmap = image,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            filterQuality = FilterQuality.Medium,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    rotationZ = topSpin
-                    scaleX = 2.4f
-                    scaleY = 2.4f
-                    alpha = 0.62f
-                }
-        )
-        Image(
-            bitmap = image,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            filterQuality = FilterQuality.Medium,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    rotationZ = -topSpin * 0.6f
-                    scaleX = 2.0f
-                    scaleY = 2.0f
-                    alpha = 0.45f
-                }
-        )
+        ) {
+            StillPlate(image)
+
+            Image(
+                bitmap = image,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                filterQuality = FilterQuality.Medium,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationZ = baseSpin
+                        scaleX = 1.9f
+                        scaleY = 1.9f
+                    }
+            )
+            Image(
+                bitmap = image,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                filterQuality = FilterQuality.Medium,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationZ = topSpin
+                        scaleX = 2.4f
+                        scaleY = 2.4f
+                        alpha = 0.62f
+                    }
+            )
+            Image(
+                bitmap = image,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                filterQuality = FilterQuality.Medium,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        rotationZ = -topSpin * 0.6f
+                        scaleX = 2.0f
+                        scaleY = 2.0f
+                        alpha = 0.45f
+                    }
+            )
+        }
     }
 }
