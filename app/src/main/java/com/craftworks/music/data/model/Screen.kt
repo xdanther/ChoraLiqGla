@@ -9,13 +9,11 @@ sealed interface Screen {
     @Serializable
     object Home : Screen
     @Serializable
-    data class HomeLists(val category: String) : Screen
-    @Serializable
     object Songs : Screen
     @Serializable
     object Radios : Screen
     @Serializable
-    object NowPlayingLandscape : Screen
+    object NowPlaying : Screen
     @Serializable
     object Search : Screen
     @Serializable
@@ -50,6 +48,4 @@ sealed interface Screen {
     object S_Playback : Screen
     @Serializable
     object S_Library : Screen
-    @Serializable
-    object S_Misc : Screen
 }

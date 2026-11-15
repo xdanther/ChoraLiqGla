@@ -1,6 +1,6 @@
 ![Logo](https://github.com/CraftWorksMC/Chora/blob/master/Github/Images/ChoraBannerTransparent.png?raw=true)
 
-A simple and light-weight app that streams music from a Subsonic or Navidrome server, or from the phone's storage.
+A simple and light-weight Android TV app that streams music from a Subsonic or Navidrome server, or from local storage.
 
 *Please do not use as a learning resource. This was my first Kotlin project, and the code is not well-organized at all. AI was used earlier in development (and it shows, the code is a mess lol)*
 
@@ -13,9 +13,8 @@ height="80">](https://f-droid.org/packages/com.craftworks.music/)
 ## Features
 
 - Subsonic/Navidrome support.
-- Android Auto.
-- Android TV.
-- Material 3 UI.
+- Android TV UI.
+- Artwork-coloured now-playing backgrounds.
 - Download songs and albums from server.
 - Internet Radio.
 - Word Synced, Line Synced And Unsynced Lyrics. [From lrclib.net or self-hosted instance and NetEase]
@@ -29,18 +28,6 @@ height="80">](https://f-droid.org/packages/com.craftworks.music/)
 - Chromecast
 
 ## Screenshots
-
-### Mobile
-<p align="center">
-    <img src="https://github.com/CraftWorksMC/Chora/blob/master/Github/Images/Now-Playing-Screen.png?raw=true" width=200>
-    <img src="https://github.com/CraftWorksMC/Chora/blob/master/Github/Images/Now-Playing-SyncedLyrics.png?raw=true" width=200>
-    <img src="https://github.com/CraftWorksMC/Chora/blob/master/Github/Images/HomeScreen.png?raw=true" width=200>
-    <img src="https://github.com/CraftWorksMC/Chora/blob/master/Github/Images/AlbumScreen.png?raw=true" width=200>
-    <img src="https://github.com/CraftWorksMC/Chora/blob/master/Github/Images/ArtistScreen.png?raw=true" width=200>
-    <img src="https://github.com/CraftWorksMC/Chora/blob/master/Github/Images/RadioScreen.png?raw=true" width=200>
-    <img src="https://github.com/CraftWorksMC/Chora/blob/master/Github/Images/PlaylistScreen.png?raw=true" width=200>
-    <img src="https://github.com/CraftWorksMC/Chora/blob/master/Github/Images/SongScreen.png?raw=true" width=200>
-</p>
 
 ### TV
 <p align="left">
@@ -58,10 +45,3 @@ Help translate on <a href="https://crowdin.com/project/chora">Crowdin</a>
 
 To help keep this project free and open source to everyone, consider donating. Thank you!  
 <a href="https://www.paypal.com/donate/?hosted_button_id=REWCVJBKECU34">
-  <img width=256px src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" alt="Donate with PayPal" />
-</a>
-
-Made with :heart: in Italy
-
-> Lyrics icon provided by [Remix Icon](https://remixicon.com/ "Remix Icon")
-> Other icons are provided by [Google Icons](https://fonts.google.com/icons "Google Icons")

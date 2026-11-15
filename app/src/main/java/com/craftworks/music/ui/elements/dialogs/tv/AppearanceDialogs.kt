@@ -45,7 +45,7 @@ import com.craftworks.music.managers.settings.TvTextSize
 import com.craftworks.music.ui.playing.NowPlayingAlignment
 import com.craftworks.music.ui.playing.NowPlayingBackground
 import com.craftworks.music.ui.playing.NowPlayingLyricsStyle
-import com.craftworks.music.ui.screens.HomeItem
+import com.craftworks.music.data.model.HomeItem
 import kotlinx.coroutines.launch
 
 @Preview(device = "id:tv_1080p", showSystemUi = false, showBackground = true)

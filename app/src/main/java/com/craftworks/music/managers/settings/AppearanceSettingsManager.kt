@@ -11,12 +11,12 @@ import com.craftworks.music.R
 import com.craftworks.music.data.BottomNavItem
 import com.craftworks.music.data.model.Screen
 import com.craftworks.music.dataStore
-import com.craftworks.music.ui.elements.ActionButton
-import com.craftworks.music.ui.elements.ActionButtonType
+import com.craftworks.music.data.model.ActionButton
+import com.craftworks.music.data.model.ActionButtonType
 import com.craftworks.music.ui.playing.NowPlayingAlignment
 import com.craftworks.music.ui.playing.NowPlayingBackground
 import com.craftworks.music.ui.playing.NowPlayingLyricsStyle
-import com.craftworks.music.ui.screens.HomeItem
+import com.craftworks.music.data.model.HomeItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -195,12 +195,12 @@ class AppearanceSettingsManager @Inject constructor(
             )
         }
 
-        if (result.none { it.screenRoute == Screen.NowPlayingLandscape }) {
+        if (result.none { it.screenRoute == Screen.NowPlaying }) {
             result.add(
                 BottomNavItem(
                     context.getString(R.string.nav_playing),
                     R.drawable.s_m_playback,
-                    Screen.NowPlayingLandscape
+                    Screen.NowPlaying
                 )
             )
         }

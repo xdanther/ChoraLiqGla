@@ -1,45 +1,25 @@
 package com.craftworks.music.ui.playing
 
-import android.content.res.Configuration
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Text
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaMetadata
-import androidx.media3.common.StarRating
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.craftworks.music.R
 import com.craftworks.music.data.model.Screen
 import com.craftworks.music.data.model.artists
 import com.craftworks.music.managers.settings.OLEDProtectionMode
-import com.craftworks.music.player.ChoraMediaLibraryService
-import com.craftworks.music.ui.elements.dialogs.RatingDialog
 import com.craftworks.music.ui.playing.tv.TvNowPlaying
 
 enum class NowPlayingAlignment {
@@ -54,32 +34,19 @@ fun NowPlayingContent(
     mediaController: MediaController? = null,
     metadata: MediaMetadata? = null,
     navHostController: NavHostController = rememberNavController(),
-    viewModel: NowPlayingViewModel = viewModel(),
-    onHide: () -> Unit = {}
+    viewModel: NowPlayingViewModel = viewModel()
 ) {
     val backgroundStyle by viewModel.backgroundStyle.collectAsStateWithLifecycle(NowPlayingBackground.STATIC_BLUR)
     val backgroundDarkMode by viewModel.isBackgroundDark.collectAsStateWithLifecycle()
     val oledProtectionMode by viewModel.oledProtectionMode.collectAsStateWithLifecycle(OLEDProtectionMode.OFF)
-    val lyricsOpen by viewModel.lyricsOpen.collectAsStateWithLifecycle()
-    val playQueueOpen by viewModel.playQueueOpen.collectAsStateWithLifecycle()
-    val detailsOpen by viewModel.detailsOpen.collectAsStateWithLifecycle()
-    var showRatingDialog by remember { mutableStateOf(false) }
-    val sleepTimerOpen by viewModel.sleepTimerDialogOpen.collectAsStateWithLifecycle()
-    val sleepTimerMinutes by ChoraMediaLibraryService.getInstance()?.sleepTimerRemainingTime
-        ?.collectAsStateWithLifecycle(initialValue = 0)
-        ?: remember { mutableIntStateOf(0) }
     val colors by viewModel.paletteColors.collectAsStateWithLifecycle()
     val artworkColours by viewModel.artworkColours.collectAsStateWithLifecycle()
     val backgroundArtwork by viewModel.backgroundArtwork.collectAsStateWithLifecycle()
     val iconTextColor by viewModel.iconTextColor.collectAsStateWithLifecycle()
 
-    val isTv = LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK ==
-        Configuration.UI_MODE_TYPE_TELEVISION
-
-    // A TV is always a dark surface: its uiMode never sets the night bit, so trusting
-    // isSystemInDarkTheme() there would fall back to the light artwork colours.
-    val isSystemDark = if (oledProtectionMode != OLEDProtectionMode.OFF || isTv) true
-        else isSystemInDarkTheme()
+    // The player is TV-only now; its uiMode never sets the night bit, so always use
+    // the dark artwork colours instead of asking the system theme.
+    val isSystemDark = true
 
     LaunchedEffect(metadata?.artworkUri, backgroundStyle) {
         viewModel.updatePaletteFromUri(metadata?.artworkUri, backgroundStyle, isSystemDark)
@@ -101,128 +68,33 @@ fun NowPlayingContent(
         overlayColor = targetOverlayColor
     )
 
-    if (isTv) {
-        TvNowPlaying(
-            mediaController,
-            iconTextColor,
-            metadata,
-            palette = colors,
-            colours = artworkColours,
-            onDownload = { metadata?.let { viewModel.downloadSong(it) } },
-            onRefreshLyrics = { viewModel.refreshLyrics(metadata) },
-            onToggleFavorite = { songId, favorite -> viewModel.setSongFavorite(songId, favorite) },
-            onGoToAlbum = {
-                val albumId = metadata?.extras?.getString("albumId")
-                if (!albumId.isNullOrBlank()) {
-                    onHide()
-                    navHostController.navigate(
-                        Screen.AlbumDetails(albumId, metadata?.artworkUri?.toString().orEmpty())
-                    ) { launchSingleTop = true }
-                }
-            },
-            onGoToArtist = {
-                val artistId = metadata?.extras?.getString("artistId")
-                    ?: metadata?.artists?.firstOrNull()?.id
-                if (!artistId.isNullOrBlank()) {
-                    onHide()
-                    navHostController.navigate(
-                        Screen.ArtistDetails(artistId, metadata?.artworkUri?.toString())
-                    ) { launchSingleTop = true }
-                }
+    TvNowPlaying(
+        mediaController,
+        iconTextColor,
+        metadata,
+        palette = colors,
+        colours = artworkColours,
+        onDownload = { metadata?.let { viewModel.downloadSong(it) } },
+        onRefreshLyrics = { viewModel.refreshLyrics(metadata) },
+        onToggleFavorite = { songId, favorite -> viewModel.setSongFavorite(songId, favorite) },
+        onGoToAlbum = {
+            val albumId = metadata?.extras?.getString("albumId")
+            if (!albumId.isNullOrBlank()) {
+                navHostController.navigate(
+                    Screen.AlbumDetails(albumId, metadata?.artworkUri?.toString().orEmpty())
+                ) { launchSingleTop = true }
             }
-        )
-    } else if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-        NowPlayingLandscape(
-            mediaController = mediaController,
-            metadata = metadata,
-            iconColor = iconTextColor,
-            sleepTimerMinutes = sleepTimerMinutes,
-            onOpenSleepTimer = { viewModel.setSleepTimerDialogOpen(true) },
-            onToggleQueue = { viewModel.setPlayQueueOpen(!playQueueOpen) },
-            onArtistNav = { artist ->
-                onHide()
-                navHostController.navigate(Screen.ArtistDetails(artist.id, artist.imageUrl ?: artist.imageId?.let {artist.getProvider()?.getImageUrl(it)}))
-            },
-            onDownload = { metadata?.let { viewModel.downloadSong(it) } }
-        )
-    } else {
-        NowPlayingPortrait(
-            mediaController = mediaController,
-            metadata = metadata,
-            iconColor = iconTextColor,
-            lyricsOpen = lyricsOpen,
-            sleepTimerMinutes = sleepTimerMinutes,
-            onToggleLyrics = { viewModel.setLyricsOpen(!lyricsOpen) },
-            onToggleQueue = { viewModel.setPlayQueueOpen(!playQueueOpen) },
-            onToggleDetails = { viewModel.setDetailsOpen(!detailsOpen) },
-            onOpenSleepTimer = { viewModel.setSleepTimerDialogOpen(true) },
-            onRefreshLyrics =  { viewModel.refreshLyrics(metadata) },
-            onArtistNav = { artist ->
-                onHide()
-                navHostController.navigate(Screen.ArtistDetails(artist.id, artist.imageUrl ?: artist.imageId?.let {artist.getProvider()?.getImageUrl(it)}))
-            },
-            onDownload = { metadata?.let { viewModel.downloadSong(it) } }
-        )
-    }
-
-
-    val playQueueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val timePickerState = rememberTimePickerState(initialHour = 0, initialMinute = 0, is24Hour = true)
-
-    if (playQueueOpen) {
-        ModalBottomSheet(
-            onDismissRequest = { viewModel.setPlayQueueOpen(false) },
-            sheetState = playQueueSheetState,
-        ) {
-            PlayQueueContent(mediaController = mediaController)
-            Spacer(modifier = Modifier.height(16.dp))
+        },
+        onGoToArtist = {
+            val artistId = metadata?.extras?.getString("artistId")
+                ?: metadata?.artists?.firstOrNull()?.id
+            if (!artistId.isNullOrBlank()) {
+                navHostController.navigate(
+                    Screen.ArtistDetails(artistId, metadata?.artworkUri?.toString())
+                ) { launchSingleTop = true }
+            }
         }
-    }
-
-    if (detailsOpen) {
-        ModalBottomSheet(
-            onDismissRequest = { viewModel.setDetailsOpen(false) },
-            sheetState = playQueueSheetState,
-        ) {
-            NowPlayingDetails(
-                isStarred = false,
-                currentRating = (metadata?.userRating as? StarRating)?.starRating?.toInt() ?: 0,
-                onOpenRating = { showRatingDialog = true }
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-
-    if (sleepTimerOpen) {
-        AlertDialog(
-            onDismissRequest = { viewModel.setSleepTimerDialogOpen(false) },
-            title = { Text(stringResource(R.string.now_playing_set_sleep_timer)) },
-            text = {
-                TimePicker(
-                    state = timePickerState,
-                )
-            },
-            confirmButton = {
-                Button (
-                    onClick = {
-                        ChoraMediaLibraryService.getInstance()?.setSleepTimer(timePickerState.hour * 60 + timePickerState.minute)
-                        viewModel.setSleepTimerDialogOpen(false)
-                    }
-                ) {
-                    Text(stringResource(R.string.action_done))
-                }
-            }
-        )
-    }
-
-    if (showRatingDialog)
-        RatingDialog(
-            currentRating = (metadata?.userRating as StarRating).starRating.toInt(),
-            onDismiss = { showRatingDialog = false },
-            onSetRating = { rating ->
-                mediaController?.setRating(StarRating(5, rating.toFloat()))
-            }
-        )
+    )
 }
 
 @Composable

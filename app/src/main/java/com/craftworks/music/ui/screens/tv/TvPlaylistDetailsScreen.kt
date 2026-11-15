@@ -188,7 +188,7 @@ fun TvPlaylistDetails(
                                     0,
                                     mediaController
                                 )
-                                navHostController.navigate(Screen.NowPlayingLandscape) {
+                                navHostController.navigate(Screen.NowPlaying) {
                                     launchSingleTop = true
                                 }
                             }
@@ -217,7 +217,7 @@ fun TvPlaylistDetails(
                                     random,
                                     mediaController
                                 )
-                                navHostController.navigate(Screen.NowPlayingLandscape) {
+                                navHostController.navigate(Screen.NowPlaying) {
                                     launchSingleTop = true
                                 }
                             }
@@ -252,7 +252,7 @@ fun TvPlaylistDetails(
                         onClick = {
                             coroutineScope.launch {
                                 SongHelper.play(playlistSongs, playlistSongs.indexOf(song), mediaController)
-                                navHostController.navigate(Screen.NowPlayingLandscape) {
+                                navHostController.navigate(Screen.NowPlaying) {
                                     launchSingleTop = true
                                 }
                             }

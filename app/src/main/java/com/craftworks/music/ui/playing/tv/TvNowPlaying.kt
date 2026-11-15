@@ -479,7 +479,6 @@ fun TvNowPlaying(
                     Spacer(Modifier.height(24.dp))
                     LyricsView(
                         iconTextColor,
-                        true,
                         mediaController,
                         PaddingValues(24.dp),
                         onRefreshLyrics
@@ -582,7 +581,6 @@ fun TvNowPlaying(
                                     ) {
                                         LyricsView(
                                             iconTextColor,
-                                            true,
                                             mediaController,
                                             PaddingValues(horizontal = 12.dp),
                                             onRefreshLyrics

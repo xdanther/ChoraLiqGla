@@ -91,7 +91,7 @@ import com.craftworks.music.ui.elements.tv.TvAlbumCard
 import com.craftworks.music.ui.elements.tv.TvHorizontalSongCard
 import com.craftworks.music.ui.playing.ArtworkColours
 import com.craftworks.music.ui.playing.ArtworkPalette
-import com.craftworks.music.ui.screens.HomeItem
+import com.craftworks.music.data.model.HomeItem
 import com.craftworks.music.ui.viewmodels.HomeScreenViewModel
 import com.craftworks.music.utils.StringUtils
 import kotlinx.coroutines.launch
@@ -224,7 +224,7 @@ fun TvHomeScreen(
                                     index = 0,
                                     mediaController = mediaController
                                 )
-                            navHostController.navigate(Screen.NowPlayingLandscape) {
+                            navHostController.navigate(Screen.NowPlaying) {
                                 launchSingleTop = true
                             }
                         }
@@ -265,7 +265,7 @@ fun TvHomeScreen(
                                 onClick = {
                                     screenScope.launch {
                                         SongHelper.play(resumeItems, index, mediaController)
-                                        navHostController.navigate(Screen.NowPlayingLandscape) {
+                                        navHostController.navigate(Screen.NowPlaying) {
                                             launchSingleTop = true
                                         }
                                     }

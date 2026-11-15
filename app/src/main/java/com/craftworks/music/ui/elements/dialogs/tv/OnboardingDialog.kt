@@ -48,9 +48,10 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.craftworks.music.R
 import com.craftworks.music.managers.MediaProviderManager
-import com.craftworks.music.ui.elements.dialogs.OnboardingStep
 import com.craftworks.music.ui.elements.dialogs.tv.provider.TvCreateMediaProviderDialog
 import com.craftworks.music.ui.elements.tv.TvProviderCard
+
+enum class OnboardingStep { OVERVIEW, PROVIDER_SELECTION, DONE }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Preview(

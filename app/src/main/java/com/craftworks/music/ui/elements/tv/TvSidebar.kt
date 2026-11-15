@@ -127,7 +127,7 @@ fun TvSidebarScaffold(
         isPlayingVisible = mediaController?.currentMediaItem != null
     }
 
-    val isNowPlaying = backStackEntry.isOnRoute(Screen.NowPlayingLandscape)
+    val isNowPlaying = backStackEntry.isOnRoute(Screen.NowPlaying)
     val backdrop = rememberGraphicsLayer()
     val density = LocalDensity.current
 
@@ -349,7 +349,7 @@ private fun TvSidebarPanel(
         }
 
         navItems
-            .filter { it.enabled && (it.screenRoute != Screen.NowPlayingLandscape || isPlayingVisible) }
+            .filter { it.enabled && (it.screenRoute != Screen.NowPlaying || isPlayingVisible) }
             .forEachIndexed { index, item ->
             TvSidebarItem(
                 label = item.title,

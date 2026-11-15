@@ -1,1 +1,1 @@
-Listen to music from Subsonic or Navidrome servers.
+Listen to music from Subsonic or Navidrome servers on Android TV.

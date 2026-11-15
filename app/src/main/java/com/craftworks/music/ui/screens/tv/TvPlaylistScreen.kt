@@ -30,9 +30,9 @@ import androidx.navigation.compose.rememberNavController
 import com.craftworks.music.R
 import com.craftworks.music.data.model.Screen
 import com.craftworks.music.data.model.id
-import com.craftworks.music.ui.elements.dialogs.playlistToDelete
-import com.craftworks.music.ui.elements.dialogs.showDeletePlaylistDialog
 import com.craftworks.music.ui.elements.dialogs.tv.PlaylistDeletionConfirmationDialog
+import com.craftworks.music.ui.elements.dialogs.tv.playlistToDelete
+import com.craftworks.music.ui.elements.dialogs.tv.showDeletePlaylistDialog
 import com.craftworks.music.ui.elements.tv.TvPageTitle
 import com.craftworks.music.ui.elements.tv.TvPlaylistCard
 import com.craftworks.music.ui.viewmodels.PlaylistScreenViewModel

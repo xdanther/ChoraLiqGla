@@ -195,7 +195,7 @@ fun TvArtistDetailsScreen(
                                             0,
                                             mediaController
                                         )
-                                        navHostController.navigate(Screen.NowPlayingLandscape) {
+                                        navHostController.navigate(Screen.NowPlaying) {
                                             launchSingleTop = true
                                         }
                                     }
@@ -235,7 +235,7 @@ fun TvArtistDetailsScreen(
                                             random,
                                             mediaController
                                         )
-                                        navHostController.navigate(Screen.NowPlayingLandscape) {
+                                        navHostController.navigate(Screen.NowPlaying) {
                                             launchSingleTop = true
                                         }
                                     }

@@ -1,5 +1,5 @@
-App semplice per ascoltare musica da un server Subsonic.
+Semplice app open-source per Android TV per riprodurre musica dai tuoi server Subsonic o Navidrome o dallo spazio locale.
 
-Chora ha un interfaccia semplice e moderna, seguendo i guideline di Material 3, con interfaccia nativa per Android TV e connessione con Android Auto, ed è completamente open-source.
+Chora ha un'interfaccia semplice e moderna pensata per la TV, realizzata con Material 3, con sfondi del player colorati in base alla copertina e testi sincronizzati.
 
-Importante: Chora non fornisce nessuna musica da sè. è solo un interfaccia per i server Subsonic, cioè che è l'utente finale a fornire la musica.
+Importante: Chora non fornisce musica. È solo un front-end per server Subsonic e/o spazio locale, quindi l'utente deve fornire i file musicali.

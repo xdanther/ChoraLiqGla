@@ -43,20 +43,6 @@ class NowPlayingViewModel @Inject constructor (
     val playbackSettingsManager: PlaybackSettingsManager,
     val miscSettingsManager: MiscSettingsManager,
 ) : ViewModel() {
-    private val _lyricsOpen = MutableStateFlow(false)
-    val lyricsOpen = _lyricsOpen.asStateFlow()
-
-    private val _playQueueOpen = MutableStateFlow(false)
-    val playQueueOpen = _playQueueOpen.asStateFlow()
-
-    private val _detailsOpen = MutableStateFlow(false)
-    val detailsOpen = _detailsOpen.asStateFlow()
-
-    private val _sleepTimerDialogOpen = MutableStateFlow(false)
-    val sleepTimerDialogOpen = _sleepTimerDialogOpen.asStateFlow()
-
-    fun setLyricsOpen(open: Boolean) { _lyricsOpen.value = open }
-
     /** Star or unstar the playing track, for the player's favourite button. */
     fun setSongFavorite(songId: String, favorite: Boolean) {
         viewModelScope.launch {
@@ -64,10 +50,6 @@ class NowPlayingViewModel @Inject constructor (
             else starredRepository.unStarItem(listOf(songId), LibraryType.SONG)
         }
     }
-    fun setPlayQueueOpen(open: Boolean) { _playQueueOpen.value = open }
-    fun setDetailsOpen(open: Boolean) { _detailsOpen.value = open }
-    fun setSleepTimerDialogOpen(open: Boolean) { _sleepTimerDialogOpen.value = open }
-
     val backgroundStyle = appearanceSettingsManager.npBackgroundFlow
     val oledProtectionMode = appearanceSettingsManager.oledProtectionMode
 

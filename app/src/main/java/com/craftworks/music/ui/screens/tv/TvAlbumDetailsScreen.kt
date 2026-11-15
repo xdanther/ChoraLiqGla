@@ -359,7 +359,7 @@ fun TvAlbumDetails(
                             onClick = {
                                 coroutineScope.launch {
                                     SongHelper.play(songs, 0, mediaController)
-                                    navHostController.navigate(Screen.NowPlayingLandscape) {
+                                    navHostController.navigate(Screen.NowPlaying) {
                                         launchSingleTop = true
                                     }
                                 }
@@ -396,7 +396,7 @@ fun TvAlbumDetails(
                                 coroutineScope.launch {
                                     val random = songs.indices.random()
                                     SongHelper.play(songs, random, mediaController)
-                                    navHostController.navigate(Screen.NowPlayingLandscape) {
+                                    navHostController.navigate(Screen.NowPlaying) {
                                         launchSingleTop = true
                                     }
                                 }
@@ -469,7 +469,7 @@ fun TvAlbumDetails(
                                         onClick = {
                                             coroutineScope.launch {
                                                 SongHelper.play(songs, songs.indexOf(song), mediaController)
-                                                navHostController.navigate(Screen.NowPlayingLandscape) {
+                                                navHostController.navigate(Screen.NowPlaying) {
                                                     launchSingleTop = true
                                                 }
                                             }
@@ -490,7 +490,7 @@ fun TvAlbumDetails(
                                     onClick = {
                                         coroutineScope.launch {
                                             SongHelper.play(songs, songs.indexOf(song), mediaController)
-                                            navHostController.navigate(Screen.NowPlayingLandscape) {
+                                            navHostController.navigate(Screen.NowPlaying) {
                                                 launchSingleTop = true
                                             }
                                         }
