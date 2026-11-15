@@ -116,8 +116,8 @@ fun TvS_AppearanceScreen() {
                 val backgroundLabels = mapOf(
                     NowPlayingBackground.PLAIN to R.string.background_style_plain,
                     NowPlayingBackground.STATIC_BLUR to R.string.background_style_blur,
-                    NowPlayingBackground.ANIMATED_BLUR to R.string.background_style_anim,
-                    NowPlayingBackground.DRIFTING_BLUR to R.string.background_style_drift,
+                    NowPlayingBackground.KEN_BURNS to R.string.background_style_ken_burns,
+                    NowPlayingBackground.LAYERED_DRIFT to R.string.background_style_drift,
                 )
 
                 SettingsButtonItem(

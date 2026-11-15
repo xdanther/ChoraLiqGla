@@ -90,7 +90,6 @@ fun <T> GenericListDialog(
 
                     ListItem(
                         selected = isSelected,
-                        enabled = !(option == NowPlayingBackground.ANIMATED_BLUR && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU),
                         headlineContent = {
                             Text(label(option) + helperText(option))
                         },

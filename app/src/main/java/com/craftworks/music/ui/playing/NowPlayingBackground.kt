@@ -12,10 +12,14 @@ import com.craftworks.music.ui.playing.background.BackdropMotion
 import com.craftworks.music.ui.playing.background.PlainBackground
 
 enum class NowPlayingBackground {
-    PLAIN, STATIC_BLUR, ANIMATED_BLUR,
+    PLAIN,
+    STATIC_BLUR,
 
-    /** The drifting cover; now the animated plate on every form factor. */
-    DRIFTING_BLUR
+    /** Flamingo's method: the artwork plate slowly pans and zooms. */
+    KEN_BURNS,
+
+    /** Accord's BlendView: layers of the artwork rotating against each other. */
+    LAYERED_DRIFT
 }
 
 @Preview
@@ -41,8 +45,8 @@ fun NowPlaying_Background(
         // Accord's counter-rotating layers.
         motion = when (backgroundStyle) {
             NowPlayingBackground.STATIC_BLUR -> BackdropMotion.NONE
-            NowPlayingBackground.ANIMATED_BLUR -> BackdropMotion.KEN_BURNS
-            NowPlayingBackground.DRIFTING_BLUR -> BackdropMotion.LAYERED_DRIFT
+            NowPlayingBackground.KEN_BURNS -> BackdropMotion.KEN_BURNS
+            NowPlayingBackground.LAYERED_DRIFT -> BackdropMotion.LAYERED_DRIFT
             NowPlayingBackground.PLAIN -> BackdropMotion.NONE
         },
         overlayColor = overlayColor,

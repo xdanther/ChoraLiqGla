@@ -204,7 +204,7 @@ fun BackgroundDialog(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val backgroundType by AppearanceSettingsManager(context).npBackgroundFlow.collectAsState(
-        NowPlayingBackground.ANIMATED_BLUR
+        NowPlayingBackground.KEN_BURNS
     )
 
     GenericListDialog(
@@ -220,15 +220,12 @@ fun BackgroundDialog(
             when (option) {
                     NowPlayingBackground.PLAIN -> R.string.background_style_plain
                     NowPlayingBackground.STATIC_BLUR -> R.string.background_style_blur
-                    NowPlayingBackground.ANIMATED_BLUR -> R.string.background_style_anim
-                    NowPlayingBackground.DRIFTING_BLUR -> R.string.background_style_drift
+                    NowPlayingBackground.KEN_BURNS -> R.string.background_style_ken_burns
+                    NowPlayingBackground.LAYERED_DRIFT -> R.string.background_style_drift
                 }
             )
         },
-        helperText = { option ->
-            if (option == NowPlayingBackground.ANIMATED_BLUR && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
-                " (Android 13+)" else ""
-        }
+        helperText = { "" }
     )
 }
 

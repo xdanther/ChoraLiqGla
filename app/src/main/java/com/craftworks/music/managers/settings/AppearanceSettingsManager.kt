@@ -88,14 +88,15 @@ class AppearanceSettingsManager @Inject constructor(
     }
 
     val npBackgroundFlow: Flow<NowPlayingBackground> = context.dataStore.data.map { preferences ->
+        // The two animated styles used to be called ANIMATED_BLUR and DRIFTING_BLUR.
+        // Keep anyone who already chose one on the matching new style.
+        val stored = when (preferences[NP_BACKGROUND_KEY]) {
+            "ANIMATED_BLUR" -> NowPlayingBackground.KEN_BURNS.name
+            "DRIFTING_BLUR" -> NowPlayingBackground.LAYERED_DRIFT.name
+            else -> preferences[NP_BACKGROUND_KEY]
+        }
         try {
-            NowPlayingBackground.valueOf(
-                preferences[NP_BACKGROUND_KEY]
-                    ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-                        NowPlayingBackground.ANIMATED_BLUR.name
-                    else
-                        NowPlayingBackground.STATIC_BLUR.name
-            )
+            NowPlayingBackground.valueOf(stored ?: NowPlayingBackground.KEN_BURNS.name)
         } catch (e: Exception) {
             println(e.message)
             NowPlayingBackground.STATIC_BLUR

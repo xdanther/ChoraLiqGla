@@ -10,6 +10,7 @@
             <string name="background_style_plain">Plain</string>
             <string name="background_style_blur">Blurred</string>
             <string name="background_style_anim">Animated</string>
+            <string name="background_style_ken_burns">Ken Burns</string>
         <string name="appearance_screen_standby">Disable Screen Standby</string>
         <string name="appearance_oled_mode">OLED Protection</string>
             <string name="appearance_oled_protection_mode">OLED Protection Mode</string>

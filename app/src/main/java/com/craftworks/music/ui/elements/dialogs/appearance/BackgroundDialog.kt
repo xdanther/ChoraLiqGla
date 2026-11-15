@@ -1,6 +1,5 @@
 package com.craftworks.music.ui.elements.dialogs.appearance
 
-import android.os.Build
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,13 +41,13 @@ fun BackgroundDialog(setShowDialog: (Boolean) -> Unit) {
     val context = LocalContext.current
 
     val backgroundType by AppearanceSettingsManager(context).npBackgroundFlow.collectAsState(
-        NowPlayingBackground.ANIMATED_BLUR)
+        NowPlayingBackground.KEN_BURNS)
 
     val backgroundTypeLabels = mapOf(
         NowPlayingBackground.PLAIN to R.string.background_style_plain,
         NowPlayingBackground.STATIC_BLUR to R.string.background_style_blur,
-        NowPlayingBackground.ANIMATED_BLUR to R.string.background_style_anim,
-        NowPlayingBackground.DRIFTING_BLUR to R.string.background_style_drift
+        NowPlayingBackground.KEN_BURNS to R.string.background_style_ken_burns,
+        NowPlayingBackground.LAYERED_DRIFT to R.string.background_style_drift
     )
 
     AlertDialog(
@@ -68,8 +67,7 @@ fun BackgroundDialog(setShowDialog: (Boolean) -> Unit) {
                                     }
                                     setShowDialog(false)
                                 },
-                                role = Role.RadioButton,
-                                enabled = !(option == NowPlayingBackground.ANIMATED_BLUR && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
+                                role = Role.RadioButton
                             ),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -81,14 +79,13 @@ fun BackgroundDialog(setShowDialog: (Boolean) -> Unit) {
                                 }
                                 setShowDialog(false)
                             },
-                            modifier = Modifier.bounceClick(),
-                            enabled = !(option == NowPlayingBackground.ANIMATED_BLUR && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
+                            modifier = Modifier.bounceClick()
                         )
                         Text(
-                            text = stringResource(id = backgroundTypeLabels[option] ?: androidx.media3.session.R.string.error_message_invalid_state) +
-                                    if (option == NowPlayingBackground.ANIMATED_BLUR && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU)
-                                        " (Android 13+)"
-                                    else "",
+                            text = stringResource(
+                                id = backgroundTypeLabels[option]
+                                    ?: androidx.media3.session.R.string.error_message_invalid_state
+                            ),
                             fontWeight = FontWeight.Normal,
                             fontSize = MaterialTheme.typography.titleMedium.fontSize,
                             color = MaterialTheme.colorScheme.onBackground,

@@ -87,7 +87,7 @@ fun NowPlayingContent(
 
     val targetOverlayColor = when {
         oledProtectionMode != OLEDProtectionMode.OFF -> Color.Black.copy(0.7f)
-        backgroundStyle == NowPlayingBackground.ANIMATED_BLUR -> {
+        backgroundStyle == NowPlayingBackground.KEN_BURNS -> {
             if (backgroundDarkMode) Color.Black.copy(0.2f) else Color.White.copy(0.2f)
         }
         else -> Color.Transparent
