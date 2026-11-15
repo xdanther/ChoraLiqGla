@@ -174,8 +174,6 @@ fun TvNowPlaying(
     val largeLyrics by settings.largeLyricsText.collectAsStateWithLifecycle(true)
     val appleLyrics by settings.appleTvLyrics.collectAsStateWithLifecycle(false)
     val oledProtectionMode by settings.oledProtectionMode.collectAsStateWithLifecycle(OLEDProtectionMode.OFF)
-    val backgroundStyle by settings.npBackgroundFlow
-        .collectAsStateWithLifecycle(NowPlayingBackground.STATIC_BLUR)
 
     var barVisible by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
@@ -324,13 +322,6 @@ fun TvNowPlaying(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // The plain, static and animated styles are drawn by NowPlaying_Background;
-            // only the drifting style paints here, from the artwork's own base colour so
-            // the first frame never flashes black.
-            .background(
-                if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR) colours.base
-                else Color.Transparent
-            )
             .focusRequester(pageFocus)
             .focusable(true)
             .onFocusChanged { pageFocused = it.isFocused }
@@ -505,17 +496,6 @@ fun TvNowPlaying(
                     } else {
                         minOf(maxWidth * 0.28f, maxHeight * 0.50f)
                     }
-
-                    // A wash built from the cover's own colours, drifting slowly
-                    if (backgroundStyle == NowPlayingBackground.DRIFTING_BLUR)
-                        if (lyricsOpen && appleLyrics) {
-                            // Over lyrics the blurred cover is wanted, exactly as the
-                            // shared background does it elsewhere; the colour wash is
-                            // for the player's own screen.
-                            LyricsBackdrop(metadata)
-                        } else {
-                            ArtworkWash(colours)
-                        }
 
                     if (sideBySideLyrics) {
                         // Lyrics get the right half, the artwork keeps the left
@@ -1331,8 +1311,8 @@ private fun AlbumArtHero(metadata: MediaMetadata?, size: Dp) {
     val request = ImageRequest.Builder(context)
         .data(metadata?.artworkUri)
         .placeholderMemoryCacheKey(metadata?.id)
-        .diskCachePolicy(CachePolicy.DISABLED)
-        .memoryCachePolicy(CachePolicy.DISABLED)
+        .diskCachePolicy(CachePolicy.ENABLED)
+        .memoryCachePolicy(CachePolicy.ENABLED)
         .crossfade(true)
         .build()
 
@@ -2123,137 +2103,3 @@ private fun TrackInfoCard(
         }
     }
 }
-
-/** The blurred cover behind the lyrics, so the pane frosts over the artwork. */
-@Composable
-private fun LyricsBackdrop(metadata: MediaMetadata?) {
-    val scale = rememberInfiniteTransition(label = "lyrics backdrop")
-    val drift by scale.animateFloat(
-        initialValue = 1.16f,
-        targetValue = 1.30f,
-        animationSpec = infiniteRepeatable(tween(30_000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "lyrics backdrop scale"
-    )
-
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(metadata?.artworkUri)
-                .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            fallback = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { scaleX = drift; scaleY = drift }
-                .blur(70.dp)
-        )
-
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.42f))
-        )
-    }
-}
-
-/**
- * tvOS 27's now playing background is a field of colour taken from the artwork, not the
- * artwork itself: a few large, soft blobs of the cover's own hues drifting while each
- * one morphs into the next. Since 27.2 the motion is quicker than it used to be.
- *
- * The base is the cover's dominant hue at a mid-dark OKLCH lightness, so the field is
- * colourful instead of black, and every blob is brighter than that base, so a pastel
- * cover can no longer produce a pastel screen.
- */
-@Composable
-private fun ArtworkWash(colours: ArtworkColours) {
-    val transition = rememberInfiniteTransition(label = "artwork wash")
-    val drift by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(14_000, easing = LinearEasing)),
-        label = "wash drift"
-    )
-    val breathe by transition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(tween(16_000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "wash breathe"
-    )
-
-    Canvas(Modifier.fillMaxSize()) {
-        val width = size.width
-        val height = size.height
-        val reach = maxOf(width, height)
-
-        drawRect(
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    colours.base,
-                    lerp(colours.base, colours.accentB, 0.45f),
-                    colours.base
-                ),
-                start = Offset(0f, 0f),
-                end = Offset(width, height)
-            )
-        )
-
-        // Every blob is larger than the screen, so colour reaches the corners instead of
-        // fading out over the base and leaving the frame dark.
-        val blobs = listOf(
-            WashBlob(colours.accentA, colours.highlight, orbitX = 0.22f, orbitY = 0.11f, phase = 0f, radius = 0.92f, speed = 1f),
-            WashBlob(colours.accentB, colours.accentA, orbitX = 0.28f, orbitY = 0.15f, phase = 0.37f, radius = 0.78f, speed = 0.62f),
-            WashBlob(colours.highlight, colours.base, orbitX = 0.32f, orbitY = 0.17f, phase = 0.71f, radius = 0.66f, speed = 0.45f)
-        )
-
-        blobs.forEach { blob ->
-            val cycle = (drift * blob.speed + blob.phase) % 1f
-            val angle = cycle * 2f * Math.PI.toFloat()
-
-            val center = Offset(
-                x = width * (0.5f + blob.orbitX * cos(angle)),
-                y = height * (0.5f + blob.orbitY * sin(angle))
-            )
-            val radius = reach * blob.radius * breathe
-
-            val mix = 0.5f + 0.5f * sin(angle + blob.phase)
-            val color = lerp(blob.from, blob.to, mix)
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        color.copy(alpha = 0.62f),
-                        color.copy(alpha = 0.34f),
-                        Color.Transparent
-                    ),
-                    center = center,
-                    radius = radius
-                ),
-                radius = radius,
-                center = center
-            )
-        }
-
-        // Only the bottom needs help, because the bar sits on it. The labels at the top
-        // are white on a mid-lightness base and need no scrim at all.
-        drawRect(
-            brush = Brush.verticalGradient(
-                0.55f to Color.Transparent,
-                0.82f to Color.Black.copy(alpha = 0.18f),
-                1f to Color.Black.copy(alpha = 0.40f)
-            )
-        )
-    }
-}
-
-private class WashBlob(
-    val from: Color,
-    val to: Color,
-    val orbitX: Float,
-    val orbitY: Float,
-    val phase: Float,
-    val radius: Float,
-    val speed: Float
-)

@@ -241,6 +241,7 @@ fun S_AppearanceScreen(navHostController: NavHostController = rememberNavControl
                         NowPlayingBackground.PLAIN to R.string.background_style_plain,
                         NowPlayingBackground.STATIC_BLUR to R.string.background_style_blur,
                         NowPlayingBackground.ANIMATED_BLUR to R.string.background_style_anim,
+                        NowPlayingBackground.DRIFTING_BLUR to R.string.background_style_drift,
                     )
                     SettingsDialogButton(
                         stringResource(R.string.appearance_background_style),

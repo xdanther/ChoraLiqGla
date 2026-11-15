@@ -70,6 +70,7 @@ fun NowPlayingContent(
         ?: remember { mutableIntStateOf(0) }
     val colors by viewModel.paletteColors.collectAsStateWithLifecycle()
     val artworkColours by viewModel.artworkColours.collectAsStateWithLifecycle()
+    val backgroundArtwork by viewModel.backgroundArtwork.collectAsStateWithLifecycle()
     val iconTextColor by viewModel.iconTextColor.collectAsStateWithLifecycle()
 
     val isTv = LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK ==
@@ -92,10 +93,13 @@ fun NowPlayingContent(
         else -> Color.Transparent
     }
 
-    // The TV player paints its own artwork wash, so drawing the shared background too
-    // stacked a second, darker field underneath it.
-    if (!(isTv && backgroundStyle == NowPlayingBackground.DRIFTING_BLUR))
-        NowPlaying_Background(colors, backgroundStyle, targetOverlayColor)
+    NowPlaying_Background(
+        colorPalette = colors,
+        backgroundStyle = backgroundStyle,
+        artwork = backgroundArtwork,
+        colours = artworkColours,
+        overlayColor = targetOverlayColor
+    )
 
     if (isTv) {
         TvNowPlaying(

@@ -1,14 +1,15 @@
 package com.craftworks.music.ui.playing
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import coil3.imageLoader
-import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
@@ -20,6 +21,7 @@ import com.craftworks.music.data.repository.StarredRepository
 import com.craftworks.music.managers.settings.AppearanceSettingsManager
 import com.craftworks.music.managers.settings.MiscSettingsManager
 import com.craftworks.music.managers.settings.PlaybackSettingsManager
+import com.craftworks.music.ui.playing.background.buildArtworkBackdrop
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import jakarta.inject.Inject
@@ -76,6 +78,13 @@ class NowPlayingViewModel @Inject constructor (
     private val _artworkColours = MutableStateFlow(ArtworkColours.default(true))
     val artworkColours = _artworkColours.asStateFlow()
 
+    /**
+     * The 64 px saturated, blurred cover the player stretches over the screen. Built
+     * once per track on a background thread, so the player never blurs at frame time.
+     */
+    private val _backgroundArtwork = MutableStateFlow<ImageBitmap?>(null)
+    val backgroundArtwork = _backgroundArtwork.asStateFlow()
+
     private val _iconTextColor = MutableStateFlow<Color>(Color.White)
     val iconTextColor = _iconTextColor.asStateFlow()
 
@@ -100,6 +109,7 @@ class NowPlayingViewModel @Inject constructor (
     fun updatePaletteFromUri(uri: Uri?, currentBackgroundStyle: NowPlayingBackground, isSystemDark: Boolean) {
         if (currentBackgroundStyle == NowPlayingBackground.PLAIN) {
             _paletteColors.value = emptyList()
+            _backgroundArtwork.value = null
             val colours = ArtworkColours.default(isSystemDark)
             _artworkColours.value = colours
             _isBackgroundDark.value = isSystemDark
@@ -108,10 +118,15 @@ class NowPlayingViewModel @Inject constructor (
         }
 
         viewModelScope.launch {
-            val colours = uri?.let { extractColoursFromUri(it.toString(), context) }
+            val artwork = uri?.let { loadArtwork(it.toString()) }
+            val colours = artwork
+                ?.let { withContext(Dispatchers.Default) { ArtworkPalette.extract(it) } }
                 ?: ArtworkColours.default(isSystemDark)
+            val backdrop = artwork
+                ?.let { withContext(Dispatchers.Default) { buildArtworkBackdrop(it) } }
 
             _artworkColours.value = colours
+            _backgroundArtwork.value = backdrop
             // Base first: the shared backgrounds draw in the order they are given.
             _paletteColors.value = listOf(colours.base, colours.accentA, colours.accentB)
             _isBackgroundDark.value = colours.isDark
@@ -121,19 +136,18 @@ class NowPlayingViewModel @Inject constructor (
         }
     }
 
-    private suspend fun extractColoursFromUri(uri: String, context: Context): ArtworkColours? = coroutineScope {
+    /**
+     * Artwork stays in Coil's caches. Disabling them (as this used to) meant every track
+     * change re-downloaded the cover before the palette and backdrop could be built,
+     * which is most of the delay the player showed between tracks.
+     */
+    private suspend fun loadArtwork(uri: String): Bitmap? {
         val request = ImageRequest.Builder(context)
             .data(uri)
             .allowHardware(false)
-            .diskCachePolicy(CachePolicy.DISABLED)
-            .memoryCachePolicy(CachePolicy.DISABLED)
             .build()
 
-        val bitmap = (context.imageLoader.execute(request) as? SuccessResult)?.image?.toBitmap()
-
-        bitmap?.let { artwork ->
-            withContext(Dispatchers.Default) { ArtworkPalette.extract(artwork) }
-        }
+        return (context.imageLoader.execute(request) as? SuccessResult)?.image?.toBitmap()
     }
 
     fun downloadSong(metadata: MediaMetadata) {

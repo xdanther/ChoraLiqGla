@@ -129,8 +129,8 @@ fun NowPlayingLandscape(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(artworkUri)
                         .placeholderMemoryCacheKey(metadata?.id)
-                        .diskCachePolicy(CachePolicy.DISABLED)
-                        .memoryCachePolicy(CachePolicy.DISABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .memoryCachePolicy(CachePolicy.ENABLED)
                         .build(),
                     contentDescription = "Album Cover Art",
                     fallback = painterResource(R.drawable.placeholder),

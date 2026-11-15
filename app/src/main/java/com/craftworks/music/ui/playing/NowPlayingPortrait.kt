@@ -252,8 +252,8 @@ fun NowPlayingPortrait(
                                     model = ImageRequest.Builder(context)
                                         .data(meta?.artworkUri)
                                         .placeholderMemoryCacheKey(meta?.id)
-                                        .diskCachePolicy(CachePolicy.DISABLED)
-                                        .memoryCachePolicy(CachePolicy.DISABLED)
+                                        .diskCachePolicy(CachePolicy.ENABLED)
+                                        .memoryCachePolicy(CachePolicy.ENABLED)
                                         .build(),
                                     contentDescription = "Album Cover Art",
                                     contentScale = ContentScale.Crop,

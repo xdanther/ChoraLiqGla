@@ -1,20 +1,20 @@
 package com.craftworks.music.ui.playing
 
-import android.os.Build
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.tooling.preview.Preview
-import com.craftworks.music.ui.playing.background.AnimatedGradientBackground
+import com.craftworks.music.ui.playing.background.ArtworkBlurBackground
+import com.craftworks.music.ui.playing.background.BackdropMotion
 import com.craftworks.music.ui.playing.background.PlainBackground
-import com.craftworks.music.ui.playing.background.StaticBlurBackground
 
 enum class NowPlayingBackground {
     PLAIN, STATIC_BLUR, ANIMATED_BLUR,
 
-    /** The TV player's drifting cover; falls back to a static blur elsewhere. */
+    /** The drifting cover; now the animated plate on every form factor. */
     DRIFTING_BLUR
 }
 
@@ -24,29 +24,28 @@ enum class NowPlayingBackground {
 fun NowPlaying_Background(
     colorPalette: List<Color> = emptyList(),
     backgroundStyle: NowPlayingBackground = NowPlayingBackground.STATIC_BLUR,
+    artwork: ImageBitmap? = null,
+    colours: ArtworkColours = ArtworkColours.default(true),
     overlayColor: Color = Color.Transparent
 ) {
-    if (colorPalette.isEmpty()) {
+    if (backgroundStyle == NowPlayingBackground.PLAIN || (colorPalette.isEmpty() && artwork == null)) {
         PlainBackground()
         return
     }
 
-    when (backgroundStyle){
-        NowPlayingBackground.PLAIN         -> PlainBackground()
-        NowPlayingBackground.STATIC_BLUR   -> StaticBlurBackground(
-            colors = colorPalette,
-            overlayColor = overlayColor
-        )
-        NowPlayingBackground.DRIFTING_BLUR -> StaticBlurBackground(
-            colors = colorPalette,
-            overlayColor = overlayColor
-        )
-        NowPlayingBackground.ANIMATED_BLUR -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) AnimatedGradientBackground(
-            color1 = colorPalette[0],
-            color2 = colorPalette.getOrNull(1) ?: colorPalette[0],
-            color3 = colorPalette.getOrNull(2) ?: colorPalette.getOrNull(1) ?: colorPalette[0],
-            overlayColor = overlayColor,
-            modifier = Modifier.fillMaxSize()
-        )
-    }
+    ArtworkBlurBackground(
+        artwork = artwork,
+        colours = colours,
+        // Each style is one of the reference players' methods:
+        // static = a still plate, animated = Flamingo's Ken Burns pan, drifting =
+        // Accord's counter-rotating layers.
+        motion = when (backgroundStyle) {
+            NowPlayingBackground.STATIC_BLUR -> BackdropMotion.NONE
+            NowPlayingBackground.ANIMATED_BLUR -> BackdropMotion.KEN_BURNS
+            NowPlayingBackground.DRIFTING_BLUR -> BackdropMotion.LAYERED_DRIFT
+            NowPlayingBackground.PLAIN -> BackdropMotion.NONE
+        },
+        overlayColor = overlayColor,
+        modifier = Modifier.fillMaxSize()
+    )
 }
