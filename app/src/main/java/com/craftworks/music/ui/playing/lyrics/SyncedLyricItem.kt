@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.craftworks.music.data.model.LyricsLine
 import com.craftworks.music.data.model.LyricsRole
 import com.craftworks.music.ui.playing.NowPlayingAlignment
+import com.craftworks.music.ui.playing.NowPlayingLyricsStyle
 import com.craftworks.music.ui.playing.calculateLyricBlur
 
 @Composable
@@ -44,31 +46,53 @@ fun SyncedLyricItem(
     color: Color,
     lyricsAnimationSpeed: Int = 1200,
     lyricsAlignment: NowPlayingAlignment,
+    lyricsStyle: NowPlayingLyricsStyle = NowPlayingLyricsStyle.CLASSIC,
+    currentPosition: Int = 0,
     onClick: () -> Unit = {},
 ) {
+    val isActive = currentLyricIndex == index
+    val spotlight = lyricsStyle == NowPlayingLyricsStyle.SPOTLIGHT
+    val gradient = lyricsStyle == NowPlayingLyricsStyle.GRADIENT
+
     val lyricAlpha: Float by animateFloatAsState(
-        targetValue = if (currentLyricIndex == index) 1f else 0.5f,
+        targetValue = when {
+            isActive -> 1f
+            spotlight -> 0.28f
+            gradient -> 0.38f
+            else -> 0.5f
+        },
         label = "Current Lyric Alpha",
         animationSpec = tween(lyricsAnimationSpeed, 0, FastOutSlowInEasing)
     )
 
+    val blurEnabled = when (lyricsStyle) {
+        NowPlayingLyricsStyle.GRADIENT -> false
+        NowPlayingLyricsStyle.SPOTLIGHT -> true
+        NowPlayingLyricsStyle.CLASSIC -> useBlur
+    }
     val lyricBlur: Dp by animateDpAsState(
-        targetValue = if (useBlur) calculateLyricBlur(
-            index, currentLyricIndex, visibleItemsInfo
+        targetValue = if (blurEnabled) calculateLyricBlur(
+            index, currentLyricIndex, visibleItemsInfo,
+            maxBlur = if (spotlight) 16f else 8f
         ) else 0.dp,
         label = "Lyric Blur",
         animationSpec = tween(lyricsAnimationSpeed / 2, 0, FastOutSlowInEasing)
     )
 
     val scale by animateFloatAsState(
-        targetValue = if (currentLyricIndex == index) 1f else 0.9f,
+        targetValue = when {
+            isActive -> if (spotlight) 1.06f else if (gradient) 1.03f else 1f
+            spotlight -> 0.86f
+            gradient -> 0.94f
+            else -> 0.9f
+        },
         label = "Lyric Scale Animation",
         animationSpec = tween(lyricsAnimationSpeed, 0, CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f))
     )
 
     if (lyric.lines[0].text.isEmpty()) {
         AnimatedContent(
-            targetState = currentLyricIndex == index
+            targetState = isActive
         ) {
             if (it) {
                 Box(
@@ -89,6 +113,30 @@ fun SyncedLyricItem(
             }
         }
     } else {
+        val lineEnd = lyric.endMs ?: (lyric.startMs + 4_000)
+        val progress = if (lineEnd > lyric.startMs) {
+            ((currentPosition - lyric.startMs).toFloat() / (lineEnd - lyric.startMs))
+                .coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+        val activeBrush = if (gradient && isActive) {
+            val dim = color.copy(alpha = 0.42f)
+            val stops = if (progress >= 0.999f) {
+                arrayOf(0f to color, 1f to color)
+            } else {
+                arrayOf(
+                    0f to color,
+                    progress.coerceAtLeast(0.001f) to color,
+                    (progress + 0.08f).coerceAtMost(1f) to dim,
+                    1f to dim
+                )
+            }
+            Brush.horizontalGradient(*stops)
+        } else {
+            null
+        }
+
         Column(
             modifier = Modifier
                 .padding(vertical = 12.dp)
@@ -109,13 +157,18 @@ fun SyncedLyricItem(
                 },
             verticalArrangement = Arrangement.SpaceEvenly
         ) {
-            lyric.lines.forEach{ line ->
+            lyric.lines.forEach { line ->
                 val isMain = line.role == LyricsRole.MAIN
+                val baseStyle = if (isMain || !lyric.lines.any { it.role == LyricsRole.MAIN }) {
+                    MaterialTheme.typography.headlineMediumEmphasized
+                } else {
+                    MaterialTheme.typography.titleLargeEmphasized
+                }
+                val style = activeBrush?.let { baseStyle.copy(brush = it) } ?: baseStyle
 
                 Text(
                     text = line.text,
-                    style = if (isMain || !lyric.lines.any { it.role == LyricsRole.MAIN }) MaterialTheme.typography.headlineMediumEmphasized
-                    else MaterialTheme.typography.titleLargeEmphasized,
+                    style = style,
                     fontWeight = FontWeight.SemiBold,
                     color = color.copy(alpha = if (isMain) lyricAlpha else lyricAlpha * 0.65f),
                     modifier = Modifier.fillMaxWidth(),

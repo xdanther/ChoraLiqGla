@@ -19,7 +19,16 @@ enum class NowPlayingBackground {
     KEN_BURNS,
 
     /** Accord's BlendView: layers of the artwork rotating against each other. */
-    LAYERED_DRIFT
+    LAYERED_DRIFT,
+
+    /** Flamingo's floating light: additive palette glows drifting over the cover. */
+    FLOATING_LIGHT,
+
+    /** Accord's quarter layers, mirrored into four slow kaleidoscope tiles. */
+    KALEIDOSCOPE,
+
+    /** The artwork's own palette flowing as broad aurora bands. */
+    AURORA
 }
 
 @Preview
@@ -47,6 +56,9 @@ fun NowPlaying_Background(
             NowPlayingBackground.STATIC_BLUR -> BackdropMotion.NONE
             NowPlayingBackground.KEN_BURNS -> BackdropMotion.KEN_BURNS
             NowPlayingBackground.LAYERED_DRIFT -> BackdropMotion.LAYERED_DRIFT
+            NowPlayingBackground.FLOATING_LIGHT -> BackdropMotion.FLOATING_LIGHT
+            NowPlayingBackground.KALEIDOSCOPE -> BackdropMotion.KALEIDOSCOPE
+            NowPlayingBackground.AURORA -> BackdropMotion.AURORA
             NowPlayingBackground.PLAIN -> BackdropMotion.NONE
         },
         overlayColor = overlayColor,

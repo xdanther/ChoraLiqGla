@@ -11,6 +11,9 @@
             <string name="background_style_blur">Blurred</string>
             <string name="background_style_anim">Animated</string>
             <string name="background_style_ken_burns">Ken Burns</string>
+            <string name="background_style_floating_light">Floating light</string>
+            <string name="background_style_kaleidoscope">Kaleidoscope</string>
+            <string name="background_style_aurora">Aurora</string>
         <string name="appearance_screen_standby">Disable Screen Standby</string>
         <string name="appearance_oled_mode">OLED Protection</string>
             <string name="appearance_oled_protection_mode">OLED Protection Mode</string>
@@ -21,6 +24,10 @@
         <string name="appearance_home_items">Home Screen Items</string>
         <string name="appearance_now_playing_title_alignment">Now Playing Title Alignment</string>
         <string name="appearance_now_playing_lyrics_alignment">Now Playing Lyrics Alignment</string>
+        <string name="appearance_now_playing_lyrics_style">Lyrics Style</string>
+            <string name="lyrics_style_classic">Classic</string>
+            <string name="lyrics_style_gradient">Gradient sweep</string>
+            <string name="lyrics_style_spotlight">Spotlight</string>
             <string name="alignment_setting_left">Left</string>
             <string name="alignment_setting_center">Center</string>
             <string name="alignment_setting_right">Right</string>

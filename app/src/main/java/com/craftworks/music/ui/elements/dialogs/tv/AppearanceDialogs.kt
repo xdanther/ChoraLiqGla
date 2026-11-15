@@ -44,6 +44,7 @@ import com.craftworks.music.managers.settings.OLEDProtectionMode
 import com.craftworks.music.managers.settings.TvTextSize
 import com.craftworks.music.ui.playing.NowPlayingAlignment
 import com.craftworks.music.ui.playing.NowPlayingBackground
+import com.craftworks.music.ui.playing.NowPlayingLyricsStyle
 import com.craftworks.music.ui.screens.HomeItem
 import kotlinx.coroutines.launch
 
@@ -222,6 +223,9 @@ fun BackgroundDialog(
                     NowPlayingBackground.STATIC_BLUR -> R.string.background_style_blur
                     NowPlayingBackground.KEN_BURNS -> R.string.background_style_ken_burns
                     NowPlayingBackground.LAYERED_DRIFT -> R.string.background_style_drift
+                    NowPlayingBackground.FLOATING_LIGHT -> R.string.background_style_floating_light
+                    NowPlayingBackground.KALEIDOSCOPE -> R.string.background_style_kaleidoscope
+                    NowPlayingBackground.AURORA -> R.string.background_style_aurora
                 }
             )
         },
@@ -230,6 +234,32 @@ fun BackgroundDialog(
 }
 
 @Preview
+@Composable
+fun LyricsStyleDialog(
+    setShowDialog: (Boolean) -> Unit = { },
+    selection: NowPlayingLyricsStyle = NowPlayingLyricsStyle.CLASSIC,
+    onSet: (NowPlayingLyricsStyle) -> Unit = { },
+) {
+    val selected by remember { mutableStateOf(selection) }
+
+    GenericListDialog(
+        setShowDialog = setShowDialog,
+        titleRes = R.string.appearance_now_playing_lyrics_style,
+        options = NowPlayingLyricsStyle.entries,
+        selectedOption = selected,
+        onOptionSelected = { onSet(it) },
+        label = { style ->
+            stringResource(
+                when (style) {
+                    NowPlayingLyricsStyle.CLASSIC -> R.string.lyrics_style_classic
+                    NowPlayingLyricsStyle.GRADIENT -> R.string.lyrics_style_gradient
+                    NowPlayingLyricsStyle.SPOTLIGHT -> R.string.lyrics_style_spotlight
+                }
+            )
+        }
+    )
+}
+
 @Composable
 fun NowPlayingAlignmentDialog(
     setShowDialog: (Boolean) -> Unit = { },

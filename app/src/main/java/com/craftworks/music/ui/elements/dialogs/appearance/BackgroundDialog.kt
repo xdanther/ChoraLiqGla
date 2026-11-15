@@ -47,7 +47,10 @@ fun BackgroundDialog(setShowDialog: (Boolean) -> Unit) {
         NowPlayingBackground.PLAIN to R.string.background_style_plain,
         NowPlayingBackground.STATIC_BLUR to R.string.background_style_blur,
         NowPlayingBackground.KEN_BURNS to R.string.background_style_ken_burns,
-        NowPlayingBackground.LAYERED_DRIFT to R.string.background_style_drift
+        NowPlayingBackground.LAYERED_DRIFT to R.string.background_style_drift,
+        NowPlayingBackground.FLOATING_LIGHT to R.string.background_style_floating_light,
+        NowPlayingBackground.KALEIDOSCOPE to R.string.background_style_kaleidoscope,
+        NowPlayingBackground.AURORA to R.string.background_style_aurora
     )
 
     AlertDialog(

@@ -99,6 +99,9 @@ fun LyricsView(
     val lyricsAlignment by appearanceSettingsManager.nowPlayingLyricsAlignment.collectAsStateWithLifecycle(
         NowPlayingAlignment.CENTER
     )
+    val lyricsStyle by appearanceSettingsManager.nowPlayingLyricsStyle.collectAsStateWithLifecycle(
+        NowPlayingLyricsStyle.CLASSIC
+    )
     val lyricsAutoscroll by appearanceSettingsManager.lyricsAutoScroll.collectAsStateWithLifecycle(
         true
     )
@@ -384,7 +387,9 @@ fun LyricsView(
                         .fillMaxSize()
                         .padding(paddingValues)
                         .onSizeChanged { size ->
-                            scrollOffset = (size.height * 0.2f).toInt()
+                            // Keep the active line slightly above the vertical middle
+                            // instead of pinning it to the upper fifth of the viewport.
+                            scrollOffset = (size.height * 0.42f).toInt()
                             plainLyricsViewportHeightPx = size.height.toFloat()
                         }
                         .verticalFadingEdges(
@@ -412,13 +417,14 @@ fun LyricsView(
                                     lyric = lyric,
                                     index = index,
                                     currentLyricIndex = currentLyricIndex.intValue,
-                                    currentPosition = currentPositionLyrics,
                                     useBlur = useBlur,
                                     useWordBounce = lyricsWordBounce,
                                     visibleItemsInfo = visibleItemsInfo,
                                     color = color,
                                     lyricsAnimationSpeed = lyricsAnimationSpeed,
                                     lyricsAlignment = alignment,
+                                    lyricsStyle = lyricsStyle,
+                                    currentPosition = currentPositionLyrics,
                                     onClick = {
                                         mediaController?.seekTo(lyric.startMs.toLong())
                                         currentPositionLyrics = lyric.startMs
@@ -436,6 +442,8 @@ fun LyricsView(
                                     color = color,
                                     lyricsAnimationSpeed = lyricsAnimationSpeed,
                                     lyricsAlignment = alignment,
+                                    lyricsStyle = lyricsStyle,
+                                    currentPosition = currentPositionLyrics,
                                     onClick = {
                                         mediaController?.seekTo(lyric.startMs.toLong())
                                         currentPositionLyrics = lyric.startMs
@@ -518,11 +526,12 @@ fun LyricsView(
 fun calculateLyricBlur(
     index: Int,
     currentLyricIndex: Int,
-    visibleItemsInfo: List<LazyListItemInfo>
+    visibleItemsInfo: List<LazyListItemInfo>,
+    maxBlur: Float = 8f
 ): Dp {
     return when {
         index == currentLyricIndex || !visibleItemsInfo.any { it.index == currentLyricIndex } -> 0.dp
-        else -> minOf(abs(currentLyricIndex - index).toFloat(), 8f).dp
+        else -> minOf(abs(currentLyricIndex - index).toFloat(), maxBlur).dp
     }
 }
 

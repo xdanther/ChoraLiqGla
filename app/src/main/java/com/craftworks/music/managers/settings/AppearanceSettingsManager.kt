@@ -15,6 +15,7 @@ import com.craftworks.music.ui.elements.ActionButton
 import com.craftworks.music.ui.elements.ActionButtonType
 import com.craftworks.music.ui.playing.NowPlayingAlignment
 import com.craftworks.music.ui.playing.NowPlayingBackground
+import com.craftworks.music.ui.playing.NowPlayingLyricsStyle
 import com.craftworks.music.ui.screens.HomeItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.NonCancellable
@@ -49,6 +50,7 @@ class AppearanceSettingsManager @Inject constructor(
         private val NP_BACKGROUND_KEY = stringPreferencesKey("np_background_type")
         private val NP_TITLE_ALIGNMENT = stringPreferencesKey("np_title_alignment")
         private val NP_LYRICS_ALIGNMENT = stringPreferencesKey("np_lyrics_alignment")
+        private val NP_LYRICS_STYLE = stringPreferencesKey("np_lyrics_style")
         private val SHOW_NAVIDROME_KEY = booleanPreferencesKey("show_navidrome_logo")
         private val SHOW_MORE_INFO_KEY = booleanPreferencesKey("show_more_info")
         private val NOW_PLAYING_LYRIC_BLUR_KEY = booleanPreferencesKey("now_playing_lyrics_blur")
@@ -382,6 +384,25 @@ class AppearanceSettingsManager @Inject constructor(
         withContext(NonCancellable) {
             context.dataStore.edit { preferences ->
                 preferences[NP_LYRICS_ALIGNMENT] = nowPlayingLyricsAlignment.name
+            }
+        }
+    }
+
+    val nowPlayingLyricsStyle: Flow<NowPlayingLyricsStyle> =
+        context.dataStore.data.map { preferences ->
+            try {
+                NowPlayingLyricsStyle.valueOf(
+                    preferences[NP_LYRICS_STYLE] ?: NowPlayingLyricsStyle.CLASSIC.name
+                )
+            } catch (e: Exception) {
+                NowPlayingLyricsStyle.CLASSIC
+            }
+        }
+
+    suspend fun setNowPlayingLyricsStyle(lyricsStyle: NowPlayingLyricsStyle) {
+        withContext(NonCancellable) {
+            context.dataStore.edit { preferences ->
+                preferences[NP_LYRICS_STYLE] = lyricsStyle.name
             }
         }
     }

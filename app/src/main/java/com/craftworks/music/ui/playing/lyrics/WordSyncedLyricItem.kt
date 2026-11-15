@@ -46,6 +46,7 @@ import com.craftworks.music.data.model.LyricsLine
 import com.craftworks.music.data.model.LyricsRole
 import com.craftworks.music.data.model.SyncedWord
 import com.craftworks.music.ui.playing.NowPlayingAlignment
+import com.craftworks.music.ui.playing.NowPlayingLyricsStyle
 import com.craftworks.music.ui.playing.calculateLyricBlur
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -62,18 +63,34 @@ fun WordSyncedLyricItem(
     color: Color,
     lyricsAnimationSpeed: Int = 1200,
     lyricsAlignment: NowPlayingAlignment,
+    lyricsStyle: NowPlayingLyricsStyle = NowPlayingLyricsStyle.CLASSIC,
     onClick: () -> Unit = {},
 ) {
+    val isActive = currentLyricIndex == index
+    val spotlight = lyricsStyle == NowPlayingLyricsStyle.SPOTLIGHT
+    val gradient = lyricsStyle == NowPlayingLyricsStyle.GRADIENT
+
+    val blurEnabled = when (lyricsStyle) {
+        NowPlayingLyricsStyle.GRADIENT -> false
+        NowPlayingLyricsStyle.SPOTLIGHT -> true
+        NowPlayingLyricsStyle.CLASSIC -> useBlur
+    }
     val lyricBlur: Dp by animateDpAsState(
-        targetValue = if (useBlur) calculateLyricBlur(
-            index, currentLyricIndex, visibleItemsInfo
+        targetValue = if (blurEnabled) calculateLyricBlur(
+            index, currentLyricIndex, visibleItemsInfo,
+            maxBlur = if (spotlight) 16f else 8f
         ) else 0.dp,
         label = "Lyric Blur",
         animationSpec = tween(lyricsAnimationSpeed, 0, FastOutSlowInEasing)
     )
 
     val scale by animateFloatAsState(
-        targetValue = if (currentLyricIndex == index) 1f else 0.95f,
+        targetValue = when {
+            isActive -> if (spotlight) 1.06f else if (gradient) 1.03f else 1f
+            spotlight -> 0.86f
+            gradient -> 0.94f
+            else -> 0.95f
+        },
         label = "Lyric Scale Animation",
         animationSpec = tween(lyricsAnimationSpeed, 0, CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f))
     )

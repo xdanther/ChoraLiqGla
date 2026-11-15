@@ -42,11 +42,13 @@ import com.craftworks.music.ui.elements.dialogs.tv.HomeItemsDialog
 import com.craftworks.music.ui.elements.dialogs.tv.NameDialog
 import com.craftworks.music.ui.elements.dialogs.tv.NavbarItemsDialog
 import com.craftworks.music.ui.elements.dialogs.tv.NowPlayingAlignmentDialog
+import com.craftworks.music.ui.elements.dialogs.tv.LyricsStyleDialog
 import com.craftworks.music.ui.elements.dialogs.tv.OledProtectionModeDialog
 import com.craftworks.music.ui.elements.dialogs.tv.ThemeDialog
 import com.craftworks.music.ui.elements.dialogs.tv.TvTextSizeDialog
 import com.craftworks.music.ui.playing.NowPlayingAlignment
 import com.craftworks.music.ui.playing.NowPlayingBackground
+import com.craftworks.music.ui.playing.NowPlayingLyricsStyle
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -60,6 +62,7 @@ fun TvS_AppearanceScreen() {
     var showNavbarItemsDialog by remember { mutableStateOf(false) }
     var showHomeItemsDialog by remember { mutableStateOf(false) }
     var showNowPlayingLyricsAlignmentDialog by remember { mutableStateOf(false) }
+    var showNowPlayingLyricsStyleDialog by remember { mutableStateOf(false) }
     var showTextSizeDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
@@ -67,6 +70,9 @@ fun TvS_AppearanceScreen() {
 
     val nowPlayingTitleAlignment by AppearanceSettingsManager(context).nowPlayingLyricsAlignment.collectAsState(
         NowPlayingAlignment.LEFT
+    )
+    val nowPlayingLyricsStyle by AppearanceSettingsManager(context).nowPlayingLyricsStyle.collectAsState(
+        NowPlayingLyricsStyle.CLASSIC
     )
 
     LazyColumn(
@@ -118,6 +124,9 @@ fun TvS_AppearanceScreen() {
                     NowPlayingBackground.STATIC_BLUR to R.string.background_style_blur,
                     NowPlayingBackground.KEN_BURNS to R.string.background_style_ken_burns,
                     NowPlayingBackground.LAYERED_DRIFT to R.string.background_style_drift,
+                    NowPlayingBackground.FLOATING_LIGHT to R.string.background_style_floating_light,
+                    NowPlayingBackground.KALEIDOSCOPE to R.string.background_style_kaleidoscope,
+                    NowPlayingBackground.AURORA to R.string.background_style_aurora,
                 )
 
                 SettingsButtonItem(
@@ -210,6 +219,21 @@ fun TvS_AppearanceScreen() {
                     ),
                     icon = ImageVector.vectorResource(R.drawable.rounded_sort_24),
                     onClick = { showNowPlayingLyricsAlignmentDialog = true }
+                )
+
+                // Lyrics style: Classic, Accord-style gradient or Flamingo-style spotlight
+                val lyricsStyleLabels = mapOf(
+                    NowPlayingLyricsStyle.CLASSIC to R.string.lyrics_style_classic,
+                    NowPlayingLyricsStyle.GRADIENT to R.string.lyrics_style_gradient,
+                    NowPlayingLyricsStyle.SPOTLIGHT to R.string.lyrics_style_spotlight
+                )
+                SettingsButtonItem(
+                    title = stringResource(R.string.appearance_now_playing_lyrics_style),
+                    subtitle = stringResource(
+                        lyricsStyleLabels[nowPlayingLyricsStyle] ?: R.string.lyrics_style_classic
+                    ),
+                    icon = ImageVector.vectorResource(R.drawable.rounded_format_line_spacing_24),
+                    onClick = { showNowPlayingLyricsStyleDialog = true }
                 )
 
                 // Dynamic Type: Android TV has no system font size, so this is ours
@@ -477,6 +501,15 @@ fun TvS_AppearanceScreen() {
         onSet = {
             coroutineScope.launch {
                 AppearanceSettingsManager(context).setNowPlayingLyricsAlignment(it)
+            }
+        }
+    )
+    if (showNowPlayingLyricsStyleDialog) LyricsStyleDialog(
+        setShowDialog = { showNowPlayingLyricsStyleDialog = it },
+        selection = nowPlayingLyricsStyle,
+        onSet = {
+            coroutineScope.launch {
+                AppearanceSettingsManager(context).setNowPlayingLyricsStyle(it)
             }
         }
     )

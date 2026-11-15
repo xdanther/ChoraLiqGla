@@ -63,12 +63,14 @@ import com.craftworks.music.ui.elements.dialogs.appearance.BackgroundDialog
 import com.craftworks.music.ui.elements.dialogs.appearance.HomeItemsDialog
 import com.craftworks.music.ui.elements.dialogs.appearance.NameDialog
 import com.craftworks.music.ui.elements.dialogs.appearance.NavbarItemsDialog
+import com.craftworks.music.ui.elements.dialogs.appearance.NowPlayingLyricsStyleDialog
 import com.craftworks.music.ui.elements.dialogs.appearance.NowPlayingTitleAlignmentDialog
 import com.craftworks.music.ui.elements.dialogs.appearance.SongListActionButtonsDialog
 import com.craftworks.music.ui.elements.dialogs.appearance.ThemeDialog
 import com.craftworks.music.ui.elements.dialogs.dialogFocusable
 import com.craftworks.music.ui.playing.NowPlayingAlignment
 import com.craftworks.music.ui.playing.NowPlayingBackground
+import com.craftworks.music.ui.playing.NowPlayingLyricsStyle
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
@@ -85,6 +87,7 @@ fun S_AppearanceScreen(navHostController: NavHostController = rememberNavControl
     var showHomeItemsDialog by remember { mutableStateOf(false) }
     var showNowPlayingTitleAlignmentDialog by remember { mutableStateOf(false) }
     var showNowPlayingLyricsAlignmentDialog by remember { mutableStateOf(false) }
+    var showNowPlayingLyricsStyleDialog by remember { mutableStateOf(false) }
     var showAlbumDetailsActionButtonsDialog by remember { mutableStateOf(false) }
     var showArtistDetailsActionButtonsDialog by remember { mutableStateOf(false) }
     var showPlaylistDetailsActionButtonsDialog by remember { mutableStateOf(false) }
@@ -101,6 +104,15 @@ fun S_AppearanceScreen(navHostController: NavHostController = rememberNavControl
     // Now Playing Lyrics Alignment
     val nowPlayingLyricsAlignment by appearanceSettingsManager.nowPlayingLyricsAlignment.collectAsState(
         NowPlayingAlignment.CENTER
+    )
+    // Now Playing Lyrics Style
+    val nowPlayingLyricsStyle by appearanceSettingsManager.nowPlayingLyricsStyle.collectAsState(
+        NowPlayingLyricsStyle.CLASSIC
+    )
+    val lyricsStyleLabels = mapOf(
+        NowPlayingLyricsStyle.CLASSIC to R.string.lyrics_style_classic,
+        NowPlayingLyricsStyle.GRADIENT to R.string.lyrics_style_gradient,
+        NowPlayingLyricsStyle.SPOTLIGHT to R.string.lyrics_style_spotlight
     )
     val alignmentLabels = mapOf(
         NowPlayingAlignment.LEFT to R.string.alignment_setting_left,
@@ -242,6 +254,9 @@ fun S_AppearanceScreen(navHostController: NavHostController = rememberNavControl
                         NowPlayingBackground.STATIC_BLUR to R.string.background_style_blur,
                         NowPlayingBackground.KEN_BURNS to R.string.background_style_ken_burns,
                         NowPlayingBackground.LAYERED_DRIFT to R.string.background_style_drift,
+                        NowPlayingBackground.FLOATING_LIGHT to R.string.background_style_floating_light,
+                        NowPlayingBackground.KALEIDOSCOPE to R.string.background_style_kaleidoscope,
+                        NowPlayingBackground.AURORA to R.string.background_style_aurora,
                     )
                     SettingsDialogButton(
                         stringResource(R.string.appearance_background_style),
@@ -337,6 +352,17 @@ fun S_AppearanceScreen(navHostController: NavHostController = rememberNavControl
                         ImageVector.vectorResource(R.drawable.rounded_sort_24),
                         toggleEvent = {
                             showNowPlayingLyricsAlignmentDialog = true
+                        }
+                    )
+                    SettingsDialogButton(
+                        stringResource(R.string.appearance_now_playing_lyrics_style),
+                        stringResource(
+                            lyricsStyleLabels[nowPlayingLyricsStyle]
+                                ?: R.string.lyrics_style_classic
+                        ),
+                        ImageVector.vectorResource(R.drawable.rounded_format_line_spacing_24),
+                        toggleEvent = {
+                            showNowPlayingLyricsStyleDialog = true
                         }
                     )
                     //Lyrics blur Info
@@ -578,6 +604,16 @@ fun S_AppearanceScreen(navHostController: NavHostController = rememberNavControl
                 onSet = {
                     runBlocking {
                         appearanceSettingsManager.setNowPlayingLyricsAlignment(it)
+                    }
+                }
+            )
+        if (showNowPlayingLyricsStyleDialog)
+            NowPlayingLyricsStyleDialog(
+                setShowDialog = { showNowPlayingLyricsStyleDialog = it },
+                selection = nowPlayingLyricsStyle,
+                onSet = {
+                    runBlocking {
+                        appearanceSettingsManager.setNowPlayingLyricsStyle(it)
                     }
                 }
             )
